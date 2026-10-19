@@ -1,33 +1,43 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
-import Test from '@/models/Test';
+import Post from '@/models/Post';
 
 export async function GET() {
   try {
-    // 1. Database se connect karo
     await connectDB();
     
-    // 2. Ek naya data save karo
-    const newTest = await Test.create({
-      name: 'Swybe Database Successfully Connected!',
+    // 1. Ek dummy Reel insert karo (Reels page test karne ke liye)
+    const newReel = await Post.create({
+      title: "Delhi Metro Update",
+      caption: "Hello guys, aaj hum baat karenge Delhi Metro ki...",
+      mediaUrl: "https://res.cloudinary.com/demo/video/upload/dog.mp4",
+      type: "reel",
+      creatorName: "Rohan Sah",
+      creatorEmail: "sahrohan2008@gmail.com",
+      likes: 120,
+      comments: 15
     });
 
-    // 3. Saara data fetch karo
-    const allTests = await Test.find({});
+    // 2. Ek dummy Feed Post insert karo (Home Feed test karne ke liye)
+    const newFeedPost = await Post.create({
+      title: "Physics", 
+      caption: "Newton ka second law samajh nahi aa raha, koi doubt clear kar do?",
+      type: "feed", 
+      creatorName: "Aman Student",
+      creatorEmail: "aman@gmail.com",
+      likes: 45,
+      comments: 12
+    });
 
-    // 4. Result return karo
-    return NextResponse.json(
-      { 
-        success: true, 
-        message: 'Database connected perfectly!', 
-        data: allTests 
-      },
-      { status: 200 }
-    );
+    return NextResponse.json({ 
+      success: true, 
+      message: "Test Data Inserted Successfully!", 
+      reel: newReel,
+      post: newFeedPost 
+    }, { status: 200 });
+
   } catch (error) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    console.error("Test Insert Error:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
