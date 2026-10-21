@@ -7,6 +7,8 @@ import Sidebar from "@/components/Sidebar";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/context/AuthContext";
 
+export const dynamic = 'force-dynamic'; // <-- YE LINE SABSE ZAROORI HAI
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
