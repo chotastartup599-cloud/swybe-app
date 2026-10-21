@@ -19,7 +19,7 @@ export default function Sidebar() {
   const links = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/feed", label: "Feed", icon: Home },
-    { href: "/reels", label: "Reels", icon: Clapperboard }, // Reels yahan hai
+    { href: "/reels", label: "Reels", icon: Clapperboard }, 
     { href: "/search", label: "Search", icon: Search },
     { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
     { href: "/doubts", label: "Doubts", icon: MessageSquare },
@@ -51,7 +51,6 @@ export default function Sidebar() {
         <span className="text-2xl font-extrabold tracking-tighter text-black dark:text-white block group-hover:hidden">S</span>
       </Link>
 
-      {/* Yahan maine overflow-y-auto aur no-scrollbar add kiya hai taaki sab fit ho jaye */}
       <nav className="flex flex-col gap-1 px-3 flex-1 overflow-y-auto no-scrollbar">
         {links.map((link) => {
           const Icon = link.icon;
@@ -67,7 +66,6 @@ export default function Sidebar() {
       </nav>
 
       <div className="flex flex-col gap-1 px-3 py-2 mt-auto shrink-0 border-t border-gray-100 dark:border-zinc-800">
-        {/* Admin Link */}
         {dbUser?.email === "chotastartup599@gmail.com" && (
           <Link href="/admin" className={`flex items-center gap-4 p-3 rounded-xl transition-colors shrink-0 ${pathname === '/admin' ? 'bg-pink-50 dark:bg-pink-900/20 font-bold text-pink-600' : 'hover:bg-gray-50 dark:hover:bg-zinc-900/50 font-medium text-pink-500'}`}>
             <Shield className="w-5 h-5 shrink-0 transition-transform group-hover:scale-105" />

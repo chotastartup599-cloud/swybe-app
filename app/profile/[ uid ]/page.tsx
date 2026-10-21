@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'; // <-- Ye line sabse upar add karo
 "use client";
 
 import { useState, useEffect } from "react";
@@ -5,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Grid, ChevronLeft, ShieldCheck, Play, AtSign, Phone } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import FollowButton from "@/components/FollowButton";
-export const dynamic = 'force-dynamic'; // <-- Ye line add karo
+
 export default function UserProfilePage() {
   const { dbUser, loading: authLoading } = useAuth();
   const router = useRouter();

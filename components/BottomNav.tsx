@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { LayoutDashboard, Home, Search, MessageSquare, Clapperboard, User } from 'lucide-react';
+import { LayoutDashboard, Home, Search, MessageSquare, Clapperboard, User, Trophy } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
 export default function BottomNav() {
@@ -17,8 +17,8 @@ export default function BottomNav() {
       <Link href="/" className="p-2"><LayoutDashboard className={getIconClass('/')} /></Link>
       <Link href="/feed" className="p-2"><Home className={getIconClass('/feed')} /></Link>
       <Link href="/search" className="p-2"><Search className={getIconClass('/search')} /></Link>
-      <Link href="/doubts" className="p-2"><MessageSquare className={getIconClass('/doubts')} /></Link>
       <Link href="/reels" className="p-2"><Clapperboard className={getIconClass('/reels')} /></Link>
+      <Link href="/leaderboard" className="p-2"><Trophy className={getIconClass('/leaderboard')} /></Link>
       <Link href="/profile" className="p-2"><User className={getIconClass('/profile')} /></Link>
     </nav>
   );
