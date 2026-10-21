@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/context/AuthContext";
-import ClientLayout from "@/components/ClientLayout"; // <-- Naya Import
+import ClientLayout from "@/components/ClientLayout";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -23,7 +23,6 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           <AuthProvider>
             
-            {/* Yahan ClientLayout use kiya */}
             <ClientLayout>
               {children}
             </ClientLayout>
