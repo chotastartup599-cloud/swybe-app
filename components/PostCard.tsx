@@ -1,165 +1,190 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, UserPlus, UserCheck } from "lucide-react";
+import { Heart, MessageCircle, Send, Bookmark, UserPlus, UserCheck, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
 import CommentModal from "./CommentModal";
 import SaveModal from "./SaveModal";
 import { useAuth } from "@/context/AuthContext";
+import { motion, AnimatePresence } from "framer-motion";
 
-interface Post {
-  _id: string;
-  title: string;
-  caption: string;
-  mediaUrl?: string;
-  creatorName: string;
-  creatorEmail: string;
-  likes: number;
-  comments: number;
-  type: string;
-}
-
-export default function PostCard({ post }: { post: Post }) {
-  const { dbUser } = useAuth();
+export default function PostCard({ post }: { post: any }) {
+  const { dbUser, refreshUser } = useAuth();
   const [isCommentOpen, setIsCommentOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   
   const [likesCount, setLikesCount] = useState(post.likes);
-  const [commentsCount, setCommentsCount] = useState(post.comments); // <-- State for real-time update
-  const [liked, setLiked] = useState(false);
+  const [commentsCount, setCommentsCount] = useState(post.comments); 
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false); 
+  const [liked, setLiked] = useState(post.isLiked || false);
+  const [saved, setSaved] = useState(post.isSaved || false);
 
-  useEffect(() => {
-    const savedLikes = JSON.parse(localStorage.getItem("swybe_liked_posts") || "[]");
-    if (savedLikes.includes(post._id)) setLiked(true);
-  }, [post._id]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [showHeart, setShowHeart] = useState(false);
+
+  const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
+  const [quizResult, setQuizResult] = useState<"correct" | "wrong" | null>(null);
+  const [quizXP, setQuizXP] = useState(0);
+
+  const mediaList = post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls : (post.mediaUrl ? [post.mediaUrl] : []);
 
   const handleLike = async () => {
     if (!dbUser) return;
-
     setLiked(!liked);
     setLikesCount(liked ? likesCount - 1 : likesCount + 1);
-
-    let savedLikes = JSON.parse(localStorage.getItem("swybe_liked_posts") || "[]");
-    if (liked) {
-      savedLikes = savedLikes.filter((id: string) => id !== post._id);
-    } else {
-      savedLikes.push(post._id);
-    }
-    localStorage.setItem("swybe_liked_posts", JSON.stringify(savedLikes));
-
     try {
-      await fetch(`/api/posts/${post._id}/like`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: dbUser.firebaseUid })
-      });
-    } catch (error) {
-      console.error("Like failed", error);
-    }
+      await fetch(`/api/posts/${post._id}/like`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: dbUser.firebaseUid }) });
+    } catch (error) { console.error("Like failed", error); }
   };
 
-  // SHARE FIX
+  const handleDoubleTap = () => {
+    if (!liked) handleLike();
+    setShowHeart(true);
+    setTimeout(() => setShowHeart(false), 800);
+  };
+
+  // NAYA: SHARE FUNCTION
   const handleShare = async () => {
     const shareUrl = window.location.origin + "/feed?id=" + post._id;
     if (navigator.share) {
       try {
-        await navigator.share({
-          title: post.title,
-          text: post.caption,
-          url: shareUrl,
-        });
-      } catch (err) {
-        console.log("Share failed", err);
-      }
+        await navigator.share({ title: post.title, text: post.caption, url: shareUrl });
+      } catch (err) { console.log("Share failed", err); }
     } else {
       navigator.clipboard.writeText(shareUrl);
       alert("🔗 Link copied to clipboard!");
     }
   };
 
+  const handleQuizSubmit = async (index: number) => {
+    if (!dbUser || selectedQuizOption !== null) return;
+    setSelectedQuizOption(index);
+    const isCorrect = index === post.quizData.correctOptionIndex;
+    if (isCorrect) {
+      setQuizResult("correct");
+      setQuizXP(5); 
+      await fetch(`/api/posts/${post._id}/quiz`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: dbUser.firebaseUid }) });
+      await refreshUser();
+    } else {
+      setQuizResult("wrong");
+    }
+  };
+
+  const handleDragEnd = (e: any, { offset, velocity }: any) => {
+    const swipe = Math.abs(offset.x) * velocity.x;
+    if (swipe < -10000) { if (currentIndex < mediaList.length - 1) setCurrentIndex(prev => prev + 1); } 
+    else if (swipe > 10000) { if (currentIndex > 0) setCurrentIndex(prev => prev - 1); }
+  };
+
+  const cleanInstaHandle = post.instagramHandle ? post.instagramHandle.replace('@', '') : null;
+
   return (
     <>
-      <div className="bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 pb-4 mb-2">
+      <div id={`post-${post._id}`} className="bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 pb-4 mb-2 w-full">
+        
         <div className="flex items-center justify-between p-3">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-pink-500 flex items-center justify-center text-white font-bold text-sm">
-              {post.creatorName?.charAt(0) || 'U'}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-black dark:text-white leading-tight">
+            <div className="w-9 h-9 rounded-full bg-pink-500 flex items-center justify-center text-white font-bold text-sm shrink-0">{post.creatorName?.charAt(0) || 'U'}</div>
+            <div className="overflow-hidden">
+              <h3 className="text-sm font-semibold text-black dark:text-white leading-tight flex items-center gap-1 truncate">
                 {post.creatorName}
+                {cleanInstaHandle && (<a href={`https://instagram.com/${cleanInstaHandle}`} target="_blank" rel="noreferrer" className="text-[11px] text-pink-500 font-medium hover:underline ml-1">@{cleanInstaHandle}</a>)}
+                <span className="text-[10px] bg-gray-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-gray-500 font-normal ml-1 shrink-0">{post.subject || "General"}</span>
               </h3>
-              <p className="text-xs text-gray-500">@{post.creatorEmail?.split('@')[0] || 'user'}</p>
+              <p className="text-xs text-gray-500 truncate">@{post.creatorEmail?.split('@')[0] || 'user'}</p>
             </div>
           </div>
-          
-          {/* FUNCTIONAL FOLLOW BUTTON (UI Level Fix) */}
-          <button 
-            onClick={() => setIsFollowing(!isFollowing)}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition ${
-              isFollowing 
-                ? "bg-gray-200 dark:bg-zinc-800 text-black dark:text-white" 
-                : "bg-blue-600 text-white hover:bg-blue-700"
-            }`}
-          >
+          <button onClick={() => setIsFollowing(!isFollowing)} className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition shrink-0 ${isFollowing ? "bg-gray-200 dark:bg-zinc-800 text-black dark:text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
             {isFollowing ? <UserCheck className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
             {isFollowing ? "Following" : "Follow"}
           </button>
         </div>
 
-        {post.mediaUrl && (
-          <div className="w-full aspect-square bg-gray-100 dark:bg-gray-900 relative">
-            {post.mediaUrl.includes('.mp4') ? (
-              <video src={post.mediaUrl} controls className="w-full h-full object-cover" />
-            ) : (
-              <img src={post.mediaUrl} alt="Post" className="w-full h-full object-cover" />
-            )}
-            <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md px-2 py-1 rounded-md">
-              <span className="text-xs font-bold text-white">📚 {post.title || "General"}</span>
-            </div>
+        {post.isTextPost ? (
+          <div className={`w-full aspect-square flex items-center justify-center p-8 text-center ${post.backgroundColor || 'bg-black'}`} onDoubleClick={handleDoubleTap}>
+            <h2 className="text-white text-2xl font-bold whitespace-pre-wrap">{post.caption}</h2>
           </div>
-        )}
+        ) : post.type === 'quiz' && post.quizData ? (
+          <div className="w-full bg-gray-50 dark:bg-zinc-900 p-6 flex flex-col justify-center">
+            <h3 className="text-lg font-bold mb-4 dark:text-white">{post.quizData.question}</h3>
+            <div className="flex flex-col gap-3">
+              {post.quizData.options.map((opt: string, i: number) => {
+                const isSelected = selectedQuizOption === i;
+                const isCorrect = i === post.quizData.correctOptionIndex;
+                let btnClass = "p-3 rounded-xl border border-gray-200 dark:border-zinc-700 text-left dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition flex justify-between items-center";
+                if (selectedQuizOption !== null) {
+                  if (isCorrect) btnClass = "p-3 rounded-xl border border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-left font-semibold flex justify-between items-center";
+                  else if (isSelected) btnClass = "p-3 rounded-xl border border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-left flex justify-between items-center";
+                  else btnClass = "p-3 rounded-xl border border-gray-200 dark:border-zinc-800 opacity-50 text-left dark:text-white flex justify-between items-center";
+                }
+                return (
+                  <button key={i} onClick={() => handleQuizSubmit(i)} disabled={selectedQuizOption !== null} className={btnClass}>
+                    {opt}
+                    {selectedQuizOption !== null && isCorrect && <CheckCircle2 className="w-5 h-5" />}
+                    {selectedQuizOption !== null && isSelected && !isCorrect && <XCircle className="w-5 h-5" />}
+                  </button>
+                );
+              })}
+            </div>
+            {quizResult && (
+              <div className={`mt-4 text-center font-bold ${quizResult === 'correct' ? 'text-green-500' : 'text-red-500'}`}>
+                {quizResult === 'correct' ? `Correct! +${quizXP} XP` : 'Wrong answer. Try again!'}
+              </div>
+            )}
+          </div>
+        ) : mediaList.length > 0 ? (
+          <div className="w-full aspect-square bg-gray-100 dark:bg-gray-900 relative group overflow-hidden" onDoubleClick={handleDoubleTap}>
+            <motion.div className="flex h-full w-full cursor-grab active:cursor-grabbing" drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.2} onDragEnd={handleDragEnd} animate={{ x: `-${currentIndex * 100}%` }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
+              {mediaList.map((url: string, index: number) => (
+                <div key={index} className="w-full h-full flex-shrink-0 snap-center pointer-events-none">
+                  {url.includes('.mp4') ? <video src={url} controls className="w-full h-full object-cover pointer-events-auto" /> : <img src={url} alt="Post" className="w-full h-full object-cover" />}
+                </div>
+              ))}
+            </motion.div>
+
+            <AnimatePresence>
+              {showHeart && (
+                <motion.div initial={{ scale: 0, opacity: 0, rotate: -15 }} animate={{ scale: [0, 1.3, 1, 1.2, 0], opacity: [0, 1, 1, 1, 0], rotate: [-15, 0, 0, 15, 0] }} transition={{ duration: 0.8, ease: "easeInOut", times: [0, 0.2, 0.5, 0.8, 1] }} className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                  <Heart className="w-28 h-28 fill-pink-500 text-pink-500 drop-shadow-2xl" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {mediaList.length > 1 && (
+              <>
+                {currentIndex > 0 && <button onClick={() => setCurrentIndex(prev => prev - 1)} className="hidden md:flex absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition z-10 hover:bg-black/70"><ChevronLeft className="w-5 h-5" /></button>}
+                {currentIndex < mediaList.length - 1 && <button onClick={() => setCurrentIndex(prev => prev + 1)} className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition z-10 hover:bg-black/70"><ChevronRight className="w-5 h-5" /></button>}
+              </>
+            )}
+            {mediaList.length > 1 && <div className="absolute top-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded-md z-10 backdrop-blur-sm">{currentIndex + 1}/{mediaList.length}</div>}
+          </div>
+        ) : null}
 
         <div className="flex justify-between items-center px-3 pt-3 pb-2">
           <div className="flex gap-4">
-            <button onClick={handleLike} className="flex items-center gap-1">
-              <Heart className={`w-6 h-6 transition ${liked ? "fill-pink-500 text-pink-500" : "text-black dark:text-white"}`} />
-            </button>
-            <button onClick={() => setIsCommentOpen(true)} className="flex items-center gap-1">
-              <MessageCircle className="w-6 h-6 text-black dark:text-white" />
-            </button>
-            {/* SHARE BUTTON FIXED */}
-            <button onClick={handleShare} className="flex items-center gap-1">
-              <Send className="w-6 h-6 text-black dark:text-white" />
-            </button>
+            <button onClick={handleLike} className="flex items-center gap-1"><Heart className={`w-6 h-6 transition ${liked ? "fill-pink-500 text-pink-500" : "text-black dark:text-white"}`} /></button>
+            <button onClick={() => setIsCommentOpen(true)} className="flex items-center gap-1"><MessageCircle className="w-6 h-6 text-black dark:text-white" /></button>
+            {/* NAYA: Share Button Fixed */}
+            <button onClick={handleShare} className="flex items-center gap-1"><Send className="w-6 h-6 text-black dark:text-white" /></button>
           </div>
-          <button onClick={() => setIsSaveModalOpen(true)}>
-            <Bookmark className="w-6 h-6 text-black dark:text-white" />
-          </button>
+          <button onClick={() => setIsSaveModalOpen(true)}><Bookmark className={`w-6 h-6 ${saved ? "fill-black dark:fill-white text-black dark:text-white" : "text-black dark:text-white"}`} /></button>
         </div>
 
         <div className="px-3">
-          <p className="text-sm font-semibold text-black dark:text-white mb-1">
-            {likesCount} likes
-          </p>
-          <p className="text-sm text-black dark:text-gray-200">
-            <span className="font-semibold mr-2">{post.creatorName}</span>
-            {post.caption}
-          </p>
-          <p onClick={() => setIsCommentOpen(true)} className="text-xs text-gray-500 mt-2 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">
-            View all {commentsCount} comments
-          </p>
+          <p className="text-sm font-semibold text-black dark:text-white mb-1">{likesCount} likes</p>
+          {!post.isTextPost && (
+             <div className="text-sm text-black dark:text-gray-200">
+               <span className="font-semibold mr-2">{post.creatorName}</span>
+               <span className={!isExpanded && post.caption?.length > 80 ? "line-clamp-2" : ""}>{post.caption}</span>
+               {post.caption?.length > 80 && (<button onClick={() => setIsExpanded(!isExpanded)} className="text-gray-500 ml-1 font-medium hover:underline">{isExpanded ? "less" : "more"}</button>)}
+             </div>
+          )}
+          <p onClick={() => setIsCommentOpen(true)} className="text-xs text-gray-500 mt-2 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">View all {commentsCount} comments</p>
         </div>
       </div>
 
-      {/* Pass onCommentAdded to increment count */}
-      <CommentModal 
-        postId={post._id} 
-        isOpen={isCommentOpen} 
-        onClose={() => setIsCommentOpen(false)} 
-        onCommentAdded={() => setCommentsCount(prev => prev + 1)} 
-      />
-      <SaveModal postId={post._id} isOpen={isSaveModalOpen} onClose={() => setIsSaveModalOpen(false)} />
+      <CommentModal postId={post._id} isOpen={isCommentOpen} onClose={() => setIsCommentOpen(false)} onCommentAdded={() => setCommentsCount((prev: number) => prev + 1)} />
+      <SaveModal postId={post._id} isOpen={isSaveModalOpen} onClose={() => { setIsSaveModalOpen(false); setSaved(true); }} />
     </>
   );
 }

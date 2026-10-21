@@ -2,27 +2,17 @@
 
 import { useState, useEffect, useRef } from "react";
 import { X, Send, Smile, Heart } from "lucide-react";
+import { useAuth } from "@/context/AuthContext"; // <-- Naya Import
 
-export default function CommentModal({ 
-  postId, 
-  isOpen, 
-  onClose,
-  onCommentAdded // <-- Naya Prop
-}: { 
-  postId: string, 
-  isOpen: boolean, 
-  onClose: () => void,
-  onCommentAdded?: () => void 
-}) {
+export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }: { postId: string, isOpen: boolean, onClose: () => void, onCommentAdded?: () => void }) {
+  const { dbUser } = useAuth(); // <-- Auth hook
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
-  
   const [replyTo, setReplyTo] = useState<{ id: string, userName: string } | null>(null);
   const [expandedReplies, setExpandedReplies] = useState<string[]>([]);
   const [likedComments, setLikedComments] = useState<string[]>([]);
-
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -46,12 +36,13 @@ export default function CommentModal({
     setLoading(true);
 
     const finalText = replyTo ? `@${replyTo.userName} ${newComment}` : newComment;
+    const userName = dbUser ? dbUser.name : "Guest User"; // <-- Dynamic Name
 
     const res = await fetch(`/api/posts/${postId}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
-        userName: "Rohan Sah", 
+        userName: userName, // <-- Yahan use kiya
         text: finalText,
         parentId: replyTo ? replyTo.id : null 
       }),
@@ -62,8 +53,6 @@ export default function CommentModal({
       setReplyTo(null);
       setShowEmoji(false);
       fetchComments();
-      
-      // NAYA: Parent ko batao ki naya comment add ho gaya hai
       if (onCommentAdded) onCommentAdded();
     }
     setLoading(false);
@@ -146,10 +135,7 @@ export default function CommentModal({
           </div>
 
           {isMainComment && replies.length > 0 && (
-            <button 
-              onClick={() => toggleReplies(rootId)} 
-              className="text-xs text-gray-500 mt-2 font-medium hover:text-gray-800 dark:hover:text-gray-300 flex items-center gap-2"
-            >
+            <button onClick={() => toggleReplies(rootId)} className="text-xs text-gray-500 mt-2 font-medium hover:text-gray-800 dark:hover:text-gray-300 flex items-center gap-2">
               <div className="w-6 h-[1px] bg-gray-400"></div>
               {isExpanded ? "Hide all replies" : `View ${replies.length} replies`}
             </button>
@@ -202,7 +188,9 @@ export default function CommentModal({
           )}
 
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white text-sm font-bold shrink-0">R</div>
+            <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                {dbUser?.name?.charAt(0) || "U"}
+            </div>
             <div className="flex-1 flex items-center bg-gray-100 dark:bg-zinc-800 rounded-full px-3 py-2 border border-transparent focus-within:border-gray-300 dark:focus-within:border-gray-600 transition">
               <input
                 ref={inputRef}

@@ -9,7 +9,6 @@ const UserSchema = new mongoose.Schema({
   isProfileComplete: { type: Boolean, default: false },
   profileType: { type: String, enum: ['school', 'competitive', 'none'], default: 'none' },
   
-  // Bio & Contact Info
   bio: { type: String, default: "Hey there! I am using Swybe." },
   socialLinks: {
     instagram: { type: String, default: "" },
@@ -17,8 +16,7 @@ const UserSchema = new mongoose.Schema({
     email: { type: String, default: "" },
   },
 
-  // Stats & Followers
-  followers: [{ type: String }], // Array of Firebase UIDs
+  followers: [{ type: String }],
   following: [{ type: String }],
   profileViews: { type: Number, default: 0 },
 
@@ -46,6 +44,9 @@ const UserSchema = new mongoose.Schema({
   streak: { type: Number, default: 0 },
   xp: { type: Number, default: 0 },
   badges: [{ type: String }], 
+  
+  // NAYA: Har subject ka watch time (seconds me)
+  subjectWatchTime: { type: Object, default: {} }, 
   
   notifications: [{
     message: String,

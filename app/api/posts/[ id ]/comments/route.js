@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import Comment from '@/models/Comment';
 import Post from '@/models/Post';
+import User from '@/models/User';
 
 export async function GET(req) {
   try {
@@ -28,14 +29,30 @@ export async function POST(req) {
 
     const newComment = await Comment.create({
       postId: id,
-      parentId: body.parentId || null, // Reply ka id
+      parentId: body.parentId || null,
       userName: body.userName,
       text: body.text
     });
 
-    // Agar ye reply nahi hai, balki main comment hai, tabhi post ka counter badhao
     if (!body.parentId) {
       await Post.findByIdAndUpdate(id, { $inc: { comments: 1 } });
+
+      // NAYA: Send Notification
+      const post = await Post.findById(id);
+      const currentUser = await User.findOne({ name: body.userName }); // Ideally pass UID from frontend
+      
+      if (post && currentUser && post.creatorEmail !== currentUser.email) {
+        const newNotification = {
+          message: `${body.userName} commented: "${body.text.substring(0, 30)}..." on your post`,
+          type: "comment",
+          isRead: false,
+          createdAt: new Date()
+        };
+        await User.findOneAndUpdate(
+          { email: post.creatorEmail },
+          { $push: { notifications: { $each: [newNotification], $position: 0 } } }
+        );
+      }
     }
 
     return NextResponse.json({ success: true, data: newComment }, { status: 201 });

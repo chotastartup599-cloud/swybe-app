@@ -9,7 +9,6 @@ export async function POST(req) {
 
     let targetUid = targetUserId;
 
-    // Agar UID nahi mila, toh Email se dhoondho (Reels ke liye)
     if (!targetUid && targetUserEmail) {
       const targetUser = await User.findOne({ email: targetUserEmail });
       if (targetUser) targetUid = targetUser.firebaseUid;
@@ -19,9 +18,27 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: "Missing IDs" }, { status: 400 });
     }
 
+    const currentUser = await User.findOne({ firebaseUid: currentUserId });
+    const targetUser = await User.findOne({ firebaseUid: targetUid });
+
+    if (!currentUser || !targetUser) return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+
     if (action === 'follow') {
       await User.findOneAndUpdate({ firebaseUid: targetUid }, { $addToSet: { followers: currentUserId } });
       await User.findOneAndUpdate({ firebaseUid: currentUserId }, { $addToSet: { following: targetUid } });
+
+      // NAYA: Send Notification
+      const newNotification = {
+        message: `${currentUser.name} started following you`,
+        type: "follow",
+        isRead: false,
+        createdAt: new Date()
+      };
+      await User.findOneAndUpdate(
+        { firebaseUid: targetUid },
+        { $push: { notifications: { $each: [newNotification], $position: 0 } } }
+      );
+
     } else if (action === 'unfollow') {
       await User.findOneAndUpdate({ firebaseUid: targetUid }, { $pull: { followers: currentUserId } });
       await User.findOneAndUpdate({ firebaseUid: currentUserId }, { $pull: { following: targetUid } });

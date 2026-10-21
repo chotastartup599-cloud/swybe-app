@@ -1,0 +1,8 @@
+# SWYBE PROJECT RULES (Strictly Follow)
+
+1. NEVER install new packages unless explicitly told.
+2. NEVER create new files unless explicitly instructed.
+3. NEVER modify or delete other files in the project.
+4. When updating a file, ALWAYS use the 'write_to_file' tool to completely replace the contents of that specific file with the new code provided.
+5. Do not run any terminal commands without asking me first.
+6. If you encounter an error, explain it to me instead of trying 10 different fixes.

@@ -8,7 +8,6 @@ import CommentModal from "@/components/CommentModal";
 import SaveModal from "@/components/SaveModal";
 import FollowButton from "@/components/FollowButton";
 import { useAuth } from "@/context/AuthContext";
-import { useRouter } from "next/navigation"; // <-- Router import kiya
 import "swiper/css";
 
 interface Reel {
@@ -20,41 +19,26 @@ interface Reel {
   creatorEmail: string;
   likes: number;
   comments: number;
+  isLiked?: boolean;
+  isSaved?: boolean;
 }
 
 export default function ReelsPage() {
-  const { dbUser, loading: authLoading } = useAuth(); // <-- authLoading nikala
-  const router = useRouter(); // <-- Router initialize kiya
-  
+  const { dbUser } = useAuth();
   const [isMuted, setIsMuted] = useState(true);
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [likedReels, setLikedReels] = useState<string[]>([]);
   
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [activeSavePostId, setActiveSavePostId] = useState<string | null>(null);
 
-  // NAYA: Auth Guard - Agar login nahi hai toh bahar bhej do
   useEffect(() => {
-    if (!authLoading && !dbUser) {
-      router.push("/auth");
-    }
-  }, [dbUser, authLoading, router]);
-
-  useEffect(() => {
-    const savedLikes = JSON.parse(localStorage.getItem("swybe_liked_reels") || "[]");
-    setLikedReels(savedLikes);
-
     async function fetchReels() {
-      // Agar user login nahi hai, toh data fetch mat karo
-      if (!dbUser) return; 
-
       try {
-        const res = await fetch('/api/posts?type=reel', { cache: 'no-store' });
+        // NAYA: userId pass kiya
+        const res = await fetch(`/api/posts?type=reel&userId=${dbUser?.firebaseUid}`, { cache: 'no-store' });
         const data = await res.json();
-        if (data.success) {
-          setReels(data.data);
-        }
+        if (data.success) setReels(data.data);
       } catch (error) {
         console.error("Error fetching reels:", error);
       } finally {
@@ -73,20 +57,12 @@ export default function ReelsPage() {
     }
   }, [activeCommentPostId, activeSavePostId]);
 
-  const handleLike = async (id: string, currentLikes: number) => {
+  const handleLike = async (id: string, currentLikes: number, isAlreadyLiked: boolean) => {
     if (!dbUser) return;
-
-    const isAlreadyLiked = likedReels.includes(id);
-    let newLikedReels = isAlreadyLiked 
-      ? likedReels.filter(r => r !== id) 
-      : [...likedReels, id];
-
-    setLikedReels(newLikedReels);
-    localStorage.setItem("swybe_liked_reels", JSON.stringify(newLikedReels));
 
     setReels((prevReels) => 
       prevReels.map((reel) => 
-        reel._id === id ? { ...reel, likes: isAlreadyLiked ? currentLikes - 1 : currentLikes + 1 } : reel
+        reel._id === id ? { ...reel, likes: isAlreadyLiked ? currentLikes - 1 : currentLikes + 1, isLiked: !isAlreadyLiked } : reel
       )
     );
 
@@ -104,21 +80,12 @@ export default function ReelsPage() {
   const handleShare = async (id: string, title: string, caption: string) => {
     const shareUrl = window.location.origin + "/reels?id=" + id;
     if (navigator.share) {
-      try {
-        await navigator.share({ title, text: caption, url: shareUrl });
-      } catch (err) {
-        console.log("Share failed", err);
-      }
+      try { await navigator.share({ title, text: caption, url: shareUrl }); } catch (err) { console.log("Share failed", err); }
     } else {
       navigator.clipboard.writeText(shareUrl);
       alert("🔗 Link copied to clipboard!");
     }
   };
-
-  // Jab tak auth load ho raha hai, ya user null hai (logout ho gaya), toh kuch mat dikhao
-  if (authLoading || !dbUser) {
-    return <div className="h-screen flex items-center justify-center dark:text-white">Redirecting...</div>;
-  }
 
   if (loading) return <div className="w-full h-[80vh] bg-black flex items-center justify-center text-white">Loading Reels...</div>;
   if (reels.length === 0) return <div className="w-full h-[80vh] bg-black flex items-center justify-center text-white">No Reels found.</div>;
@@ -126,15 +93,9 @@ export default function ReelsPage() {
   return (
     <div className="w-full min-h-screen bg-black flex justify-center pt-16 pb-16">
       <div className="w-full max-w-[420px] h-[calc(100vh-128px)] bg-zinc-950 relative overflow-hidden rounded-xl shadow-2xl border border-zinc-800">
-        <Swiper
-          direction={"vertical"}
-          slidesPerView={1}
-          mousewheel={true}
-          modules={[Mousewheel]}
-          className="w-full h-full"
-        >
+        <Swiper direction={"vertical"} slidesPerView={1} mousewheel={true} modules={[Mousewheel]} className="w-full h-full">
           {reels.map((reel) => {
-            const isLiked = likedReels.includes(reel._id);
+            const isLiked = reel.isLiked;
             const isMyReel = dbUser?.email === reel.creatorEmail;
 
             return (
@@ -157,10 +118,7 @@ export default function ReelsPage() {
                     
                     {!isMyReel && (
                       <div className="ml-2">
-                        <FollowButton 
-                          targetUserEmail={reel.creatorEmail} 
-                          initialIsFollowing={false} 
-                        />
+                        <FollowButton targetUserEmail={reel.creatorEmail} initialIsFollowing={false} />
                       </div>
                     )}
                   </div>
@@ -169,7 +127,7 @@ export default function ReelsPage() {
                 </div>
 
                 <div className="absolute right-2 bottom-6 z-10 flex flex-col items-center gap-6 text-white">
-                  <button onClick={() => handleLike(reel._id, reel.likes)} className="flex flex-col items-center gap-1 group">
+                  <button onClick={() => handleLike(reel._id, reel.likes, !!isLiked)} className="flex flex-col items-center gap-1 group">
                     <Heart size={28} className={isLiked ? "fill-pink-500 text-pink-500 transition" : "group-hover:text-pink-500 transition"} />
                     <span className="text-xs font-semibold">{reel.likes}</span>
                   </button>
@@ -185,7 +143,7 @@ export default function ReelsPage() {
                   </button>
                   
                   <button onClick={() => setActiveSavePostId(reel._id)} className="flex flex-col items-center gap-1 group">
-                    <Bookmark size={28} className="group-hover:text-yellow-400 transition" />
+                    <Bookmark size={28} className={reel.isSaved ? "fill-yellow-400 text-yellow-400" : "group-hover:text-yellow-400 transition"} />
                     <span className="text-xs font-semibold">Save</span>
                   </button>
                 </div>
