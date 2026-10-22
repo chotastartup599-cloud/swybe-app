@@ -1,4 +1,3 @@
-export const dynamic = 'force-dynamic'; // <-- Ye line sabse upar add karo
 "use client";
 
 import { useState, useEffect } from "react";
@@ -11,7 +10,6 @@ export default function UserProfilePage() {
   const { dbUser, loading: authLoading } = useAuth();
   const router = useRouter();
   
-  // Next.js 15 Fix: useParams hook use karo
   const params = useParams();
   const uid = params.uid as string;
 
@@ -24,7 +22,6 @@ export default function UserProfilePage() {
   const isMyProfile = dbUser?.firebaseUid === uid;
   const isFollowing = dbUser?.following?.includes(uid);
 
-  // NAYA: Follow button click hone par count update karne ka function
   const handleFollowChange = (isFollowing: boolean) => {
     setUser((prevUser: any) => {
       if (!prevUser) return prevUser;
@@ -97,7 +94,6 @@ export default function UserProfilePage() {
             <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
               <h2 className="text-2xl font-bold dark:text-white">{user.name}</h2>
               
-              {/* Yahan onFollowChange pass kiya hai */}
               {!isMyProfile && (
                 <FollowButton 
                   targetUserId={uid} 
