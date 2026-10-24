@@ -32,11 +32,13 @@ export default function ReelsPage() {
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [activeSavePostId, setActiveSavePostId] = useState<string | null>(null);
 
+  // FIX: dependency array me 'dbUser' (pura object) ki jagah 'dbUser?.firebaseUid' 
+  // (stable string) use kiya hai. Isse follow/like/quiz ke baad reels dobara 
+  // fetch nahi honge aur scroll position reset nahi hogi.
   useEffect(() => {
     async function fetchReels() {
       try {
-        // NAYA: userId pass kiya
-        const res = await fetch(`/api/posts?type=reel&userId=${dbUser?.firebaseUid}`, { cache: 'no-store' });
+        const res = await fetch(`/api/posts?type=reel&userId=${dbUser?.firebaseUid || ""}`, { cache: 'no-store' });
         const data = await res.json();
         if (data.success) setReels(data.data);
       } catch (error) {
@@ -46,7 +48,8 @@ export default function ReelsPage() {
       }
     }
     fetchReels();
-  }, [dbUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbUser?.firebaseUid]);
 
   useEffect(() => {
     if (activeCommentPostId || activeSavePostId) {
@@ -118,7 +121,7 @@ export default function ReelsPage() {
                     
                     {!isMyReel && (
                       <div className="ml-2">
-                        <FollowButton targetUserEmail={reel.creatorEmail} initialIsFollowing={false} />
+                        <FollowButton targetUserEmail={reel.creatorEmail} initialIsFollowing={!!dbUser?.following?.includes(reel.creatorEmail)} />
                       </div>
                     )}
                   </div>

@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 const ADMIN_EMAIL = "chotastartup599@gmail.com";
 
 export default function AdminDashboard() {
-  const { dbUser, loading } = useAuth();
+  const { dbUser, loading, getToken } = useAuth();
   const router = useRouter();
   
   const [activeTab, setActiveTab] = useState<"overview" | "creators" | "users" | "settings" | "blocks" | "content">("overview");
@@ -35,15 +35,24 @@ export default function AdminDashboard() {
     }
   }, [dbUser, loading, isAdmin]);
 
+  const authHeaders = async () => {
+    const token = await getToken();
+    return {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    };
+  };
+
   const fetchData = async () => {
     setFetching(true);
     try {
+      const headers = await authHeaders();
       const [creatorRes, settingsRes, blocksRes, postsRes, usersRes] = await Promise.all([
-        fetch("/api/admin/creators"),
+        fetch("/api/admin/creators", { headers }),
         fetch("/api/admin/settings"),
         fetch("/api/admin/blocks"),
-        fetch("/api/admin/posts"),
-        fetch("/api/admin/users") // Naya API call
+        fetch("/api/admin/posts", { headers }),
+        fetch("/api/admin/users", { headers })
       ]);
 
       const cData = await creatorRes.json();
@@ -65,19 +74,21 @@ export default function AdminDashboard() {
   };
 
   const handleCreatorAction = async (uid: string, status: string) => {
+    const headers = await authHeaders();
     await fetch("/api/admin/creators", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ firebaseUid: uid, status })
     });
     setCreators(creators.filter(c => c.firebaseUid !== uid));
-    fetchData(); // Refresh all users
+    fetchData();
   };
 
   const handleUpdateRole = async (uid: string, newRole: string) => {
+    const headers = await authHeaders();
     await fetch("/api/admin/users", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ userId: uid, role: newRole })
     });
     fetchData();
@@ -85,16 +96,18 @@ export default function AdminDashboard() {
 
   const handleDeleteUser = async (id: string) => {
     if (!confirm("Are you sure you want to delete this user?")) return;
-    await fetch(`/api/admin/users?id=${id}`, { method: "DELETE" });
+    const headers = await authHeaders();
+    await fetch(`/api/admin/users?id=${id}`, { method: "DELETE", headers });
     setAllUsers(allUsers.filter(u => u._id !== id));
   };
 
   const handleUpdateSettings = async (key: string, updatedArray: string[]) => {
     const updatedSettings = { ...settings, [key]: updatedArray };
     setSettings(updatedSettings);
+    const headers = await authHeaders();
     await fetch("/api/admin/settings", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(updatedSettings)
     });
   };
@@ -115,9 +128,10 @@ export default function AdminDashboard() {
 
   const handleAddBlock = async () => {
     if (!newBlock.title || !newBlock.url) return alert("Title and URL required");
+    const headers = await authHeaders();
     const res = await fetch("/api/admin/blocks", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(newBlock)
     });
     const data = await res.json();
@@ -129,13 +143,15 @@ export default function AdminDashboard() {
 
   const handleDeleteBlock = async (id: string) => {
     if (!confirm("Delete this block?")) return;
-    await fetch(`/api/admin/blocks?id=${id}`, { method: "DELETE" });
+    const headers = await authHeaders();
+    await fetch(`/api/admin/blocks?id=${id}`, { method: "DELETE", headers });
     setBlocks(blocks.filter(b => b._id !== id));
   };
 
   const handleDeletePost = async (id: string) => {
     if (!confirm("Delete this post permanently?")) return;
-    await fetch(`/api/admin/posts?id=${id}`, { method: "DELETE" });
+    const headers = await authHeaders();
+    await fetch(`/api/admin/posts?id=${id}`, { method: "DELETE", headers });
     setPosts(posts.filter(p => p._id !== id));
   };
 
@@ -154,7 +170,6 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex flex-col md:flex-row pt-16 md:pt-0">
       
-      {/* Admin Sidebar */}
       <div className="w-full md:w-64 bg-white dark:bg-black border-r border-gray-200 dark:border-zinc-800 p-4 flex flex-col gap-2 shrink-0 md:h-screen fixed md:relative z-10 overflow-y-auto">
         <h2 className="text-xl font-bold dark:text-white mb-4 hidden md:block">Control Center</h2>
         <button onClick={() => setActiveTab("overview")} className={`flex items-center gap-3 p-3 rounded-xl transition ${activeTab === "overview" ? "bg-black text-white dark:bg-white dark:text-black" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-900"}`}><LayoutDashboard className="w-5 h-5"/> Overview</button>
@@ -165,10 +180,8 @@ export default function AdminDashboard() {
         <button onClick={() => setActiveTab("content")} className={`flex items-center gap-3 p-3 rounded-xl transition ${activeTab === "content" ? "bg-black text-white dark:bg-white dark:text-black" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-900"}`}><FileText className="w-5 h-5"/> Content</button>
       </div>
 
-      {/* Main Content Area */}
       <div className="flex-1 p-4 md:p-8 pb-20">
         
-        {/* OVERVIEW TAB */}
         {activeTab === "overview" && (
           <div className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold dark:text-white mb-6">Dashboard Overview</h1>
@@ -189,7 +202,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* CREATORS TAB */}
         {activeTab === "creators" && (
           <div className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold dark:text-white mb-6">Pending Approvals</h1>
@@ -213,7 +225,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ALL USERS TAB (NEW) */}
         {activeTab === "users" && (
           <div className="max-w-5xl mx-auto">
             <h1 className="text-2xl font-bold dark:text-white mb-6">Manage All Users</h1>
@@ -265,7 +276,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* SETTINGS TAB */}
         {activeTab === "settings" && settings && (
           <div className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold dark:text-white mb-6">Manage App Settings</h1>
@@ -295,7 +305,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* BLOCKS TAB */}
         {activeTab === "blocks" && (
           <div className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold dark:text-white mb-6">Manage Content Blocks (Blogger Links)</h1>
@@ -331,7 +340,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* CONTENT TAB */}
         {activeTab === "content" && (
           <div className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold dark:text-white mb-6">Manage Content</h1>

@@ -31,6 +31,9 @@ function FeedContent() {
     if (node) observerRef.current.observe(node);
   }, [loading, loadingMore, hasMore]);
 
+  // FIX: dependency array me 'dbUser' (pura object) ki jagah 'dbUser?.firebaseUid' 
+  // (stable string) use kiya hai. Isse jab bhi refreshUser() call hota hai 
+  // (follow/quiz/profile-edit ke baad), feed dobara fetch NAHI hoga.
   useEffect(() => {
     async function fetchPosts() {
       if (!dbUser) return;
@@ -52,7 +55,7 @@ function FeedContent() {
         const data = await res.json();
         
         if (data.success) {
-          let feedPosts = data.data.filter((post: any) => post.type !== 'reel');
+          let feedPosts = data.data.filter((post: any) => post.type !== 'reel' && post.type !== 'story');
           if (subjectFilter) {
             feedPosts = feedPosts.filter((post: any) => post.subject?.toLowerCase() === subjectFilter.toLowerCase());
           }
@@ -69,7 +72,8 @@ function FeedContent() {
       }
     }
     fetchPosts();
-  }, [dbUser, skip, activeTab, subjectFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbUser?.firebaseUid, skip, activeTab, subjectFilter]);
 
   if (authLoading || !dbUser) {
     return <div className="h-screen flex items-center justify-center dark:text-white">Redirecting...</div>;

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { GraduationCap, UserCheck, Mail, Lock, User, Loader2, Eye, EyeOff, AlertCircle } from "lucide-react";
 
 export default function AuthPage() {
   const router = useRouter();
-  const { loginWithGoogle, loginAsGuest, signupWithEmail, loginWithEmail } = useAuth();
+  const { dbUser, loading: authLoading, loginWithGoogle, loginAsGuest, signupWithEmail, loginWithEmail } = useAuth();
   
   const [role, setRole] = useState<"learner" | "master">("learner");
   const [isLogin, setIsLogin] = useState(false); 
@@ -17,6 +17,34 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
+  // FIX: Ab redirect decision dbUser sync hone ke baad hoga, 
+  // uske "isProfileComplete" status ke hisaab se — isliye existing users 
+  // ko baar baar onboarding form par nahi bhejenge.
+  const pendingModeRef = useRef<"login" | "signupChoice" | "guest" | null>(null);
+
+  useEffect(() => {
+    if (!pendingModeRef.current) return;
+    if (authLoading) return; // Context abhi sync kar raha hai, wait karo
+    if (!dbUser) return; // dbUser abhi tak set nahi hua, wait karo
+
+    const mode = pendingModeRef.current;
+    pendingModeRef.current = null; // Consume it, dobara na chale
+
+    if (dbUser.isProfileComplete) {
+      router.push("/");
+      return;
+    }
+
+    if (mode === "guest") {
+      router.push("/onboarding/learner");
+    } else if (mode === "signupChoice") {
+      router.push(role === "master" ? "/onboarding/creator" : "/onboarding/learner");
+    } else {
+      // Login hua, lekin profile abhi bhi incomplete hai (edge case) -> chooser dikhao
+      router.push("/onboarding");
+    }
+  }, [dbUser, authLoading, router, role]);
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -25,14 +53,13 @@ export default function AuthPage() {
     try {
       if (isLogin) {
         await loginWithEmail(formData.email, formData.password);
+        pendingModeRef.current = "login";
       } else {
         if (!formData.name) throw new Error("Please enter your full name.");
         if (formData.password.length < 6) throw new Error("Password must be at least 6 characters.");
         await signupWithEmail(formData.name, formData.email, formData.password);
+        pendingModeRef.current = "signupChoice";
       }
-      
-      router.push(role === "master" ? "/onboarding/creator" : "/onboarding/learner"); 
-      
     } catch (err: any) {
       let errMsg = err.message.replace("Firebase: ", "");
       if (errMsg.includes("auth/email-already-in-use")) {
@@ -42,6 +69,7 @@ export default function AuthPage() {
         errMsg = "Invalid email or password.";
       }
       setError(errMsg);
+      pendingModeRef.current = null;
     } finally {
       setLoading(false);
     }
@@ -52,9 +80,10 @@ export default function AuthPage() {
     setError(null);
     try {
       await loginWithGoogle();
-      router.push(role === "master" ? "/onboarding/creator" : "/onboarding/learner");
+      pendingModeRef.current = isLogin ? "login" : "signupChoice";
     } catch (err: any) {
       setError("Google login failed. Please try again.");
+      pendingModeRef.current = null;
     } finally {
       setLoading(false);
     }
@@ -65,9 +94,10 @@ export default function AuthPage() {
     setError(null);
     try {
       await loginAsGuest();
-      router.push("/onboarding/learner");
+      pendingModeRef.current = "guest";
     } catch (err: any) {
       setError("Guest login failed. Please try again.");
+      pendingModeRef.current = null;
     } finally {
       setLoading(false);
     }

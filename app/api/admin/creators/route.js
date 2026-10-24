@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/models/User';
+import { requireAdmin } from '@/lib/apiAuth';
 
-export async function GET() {
+export async function GET(req) {
+  const auth = await requireAdmin(req);
+  if (auth.error) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+
   try {
     await connectDB();
-    // FIX: 'creator' ki jagah 'master' kiya
     const pendingCreators = await User.find({ 
       role: 'master', 
       masterStatus: 'pending' 
@@ -18,6 +21,9 @@ export async function GET() {
 }
 
 export async function POST(req) {
+  const auth = await requireAdmin(req);
+  if (auth.error) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+
   try {
     await connectDB();
     const { firebaseUid, status } = await req.json();
@@ -28,7 +34,7 @@ export async function POST(req) {
 
     const updatedUser = await User.findOneAndUpdate(
       { firebaseUid },
-      { masterStatus: status }, // 'approved' ya 'rejected'
+      { masterStatus: status },
       { new: true }
     );
 

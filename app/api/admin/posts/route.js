@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import Post from '@/models/Post';
+import { requireAdmin } from '@/lib/apiAuth';
 
-export async function GET() {
+export async function GET(req) {
+  const auth = await requireAdmin(req);
+  if (auth.error) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+
   try {
     await connectDB();
     const posts = await Post.find().sort({ createdAt: -1 });
@@ -13,6 +17,9 @@ export async function GET() {
 }
 
 export async function DELETE(req) {
+  const auth = await requireAdmin(req);
+  if (auth.error) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+
   try {
     await connectDB();
     const { searchParams } = new URL(req.url);

@@ -45,8 +45,11 @@ const UserSchema = new mongoose.Schema({
   xp: { type: Number, default: 0 },
   badges: [{ type: String }], 
   
-  // NAYA: Har subject ka watch time (seconds me)
+  // Har subject ka watch time (seconds me)
   subjectWatchTime: { type: Object, default: {} }, 
+
+  // NAYA: Quiz replay-farming rokne ke liye - answered quiz post IDs
+  quizzesAnswered: [{ type: String }],
   
   notifications: [{
     message: String,

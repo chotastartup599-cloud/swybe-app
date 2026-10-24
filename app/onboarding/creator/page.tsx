@@ -16,8 +16,14 @@ export default function CreatorOnboarding() {
   const [bio, setBio] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // FIX: Agar user login nahi hai -> /auth bhejo. 
+  // Agar profile already complete hai -> dobara form mat dikhao, home bhej do.
   useEffect(() => {
-    if (!loading && !dbUser) router.push("/auth");
+    if (!loading && !dbUser) {
+      router.push("/auth");
+    } else if (!loading && dbUser?.isProfileComplete) {
+      router.push("/");
+    }
   }, [dbUser, loading, router]);
 
   const handleSubmit = async () => {
@@ -32,7 +38,7 @@ export default function CreatorOnboarding() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           firebaseUid: dbUser.firebaseUid,
-          role: "master", // <-- Perfect Role
+          role: "master",
           masterDetails: { instagramHandle, subject, experience, bio }
         })
       });
@@ -51,7 +57,7 @@ export default function CreatorOnboarding() {
     }
   };
 
-  if (loading || !dbUser) return <div className="h-screen flex items-center justify-center dark:text-white">Loading...</div>;
+  if (loading || !dbUser || dbUser.isProfileComplete) return <div className="h-screen flex items-center justify-center dark:text-white">Loading...</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 p-6 flex flex-col">

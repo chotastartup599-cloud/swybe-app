@@ -36,6 +36,16 @@ export default function LearnerOnboarding() {
   const [hobbies, setHobbies] = useState<string[]>([]);
   const [customHobby, setCustomHobby] = useState("");
 
+  // FIX: Agar user login nahi hai -> /auth bhejo.
+  // Agar profile already complete hai -> dobara form mat dikhao, home bhej do.
+  useEffect(() => {
+    if (!loading && !dbUser) {
+      router.push("/auth");
+    } else if (!loading && dbUser?.isProfileComplete) {
+      router.push("/");
+    }
+  }, [dbUser, loading, router]);
+
   // Fetch Settings from Admin API
   useEffect(() => {
     async function fetchSettings() {
@@ -111,7 +121,7 @@ export default function LearnerOnboarding() {
     </button>
   );
 
-  if (loading || fetchingSettings) return <div className="h-screen flex items-center justify-center dark:text-white"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+  if (loading || fetchingSettings || !dbUser || dbUser.isProfileComplete) return <div className="h-screen flex items-center justify-center dark:text-white"><Loader2 className="w-8 h-8 animate-spin" /></div>;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 p-4 py-8">

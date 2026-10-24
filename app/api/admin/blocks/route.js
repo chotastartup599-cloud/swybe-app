@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import Block from '@/models/Block';
+import { requireAdmin } from '@/lib/apiAuth';
 
+// GET: Public (Dashboard aur Search page use karte hain)
 export async function GET() {
   try {
     await connectDB();
@@ -13,6 +15,9 @@ export async function GET() {
 }
 
 export async function POST(req) {
+  const auth = await requireAdmin(req);
+  if (auth.error) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+
   try {
     await connectDB();
     const body = await req.json();
@@ -24,6 +29,9 @@ export async function POST(req) {
 }
 
 export async function DELETE(req) {
+  const auth = await requireAdmin(req);
+  if (auth.error) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+
   try {
     await connectDB();
     const { searchParams } = new URL(req.url);

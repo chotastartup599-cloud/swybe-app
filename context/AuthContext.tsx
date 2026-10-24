@@ -23,6 +23,7 @@ interface AuthContextType {
   loginWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  getToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,6 +33,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [dbUser, setDbUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Sirf DB se latest user data laata hai (XP/Streak NAHI badhata)
+  const fetchDbUser = async (uid: string) => {
+    try {
+      const res = await fetch(`/api/users/${uid}`);
+      const data = await res.json();
+      if (data.success) {
+        setDbUser(data.data);
+      }
+    } catch (error) {
+      console.error("Fetch DB User Error:", error);
+    }
+  };
+
+  // Sync + Create user in DB (sirf login/signup ke time chalta hai)
   const syncUserWithDB = async (firebaseUser: User) => {
     try {
       const res = await fetch('/api/users/sync', {
@@ -49,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.success) {
         setDbUser(data.data);
         
-        // Activity API Call
+        // Streak/XP sirf ek baar yahan update hota hai (login/app-load ke time)
         const activityRes = await fetch('/api/users/activity', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -58,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const activityData = await activityRes.json();
         if (activityData.success) setDbUser(activityData.data);
       } else {
-        console.error("DB Sync Failed:", data.error); // <-- Ye check karo terminal me
+        console.error("DB Sync Failed:", data.error);
       }
     } catch (error) {
       console.error("DB Sync Error:", error);
@@ -78,8 +93,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
+  const getToken = async (): Promise<string | null> => {
+    if (!auth.currentUser) return null;
+    try {
+      return await auth.currentUser.getIdToken();
+    } catch (error) {
+      console.error("Token fetch error:", error);
+      return null;
+    }
+  };
+
+  // FIX: Ab ye sirf fresh data fetch karta hai, XP/Streak badhाता NAHI
+  // Isko follow/unfollow, edit-profile, quiz-answer jaise jagah use karo
   const refreshUser = async () => {
-    if (user) await syncUserWithDB(user);
+    if (user) await fetchDbUser(user.uid);
   };
 
   const loginWithGoogle = async () => {
@@ -119,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, dbUser, loading, loginWithGoogle, loginAsGuest, signupWithEmail, loginWithEmail, logout, refreshUser 
+      user, dbUser, loading, loginWithGoogle, loginAsGuest, signupWithEmail, loginWithEmail, logout, refreshUser, getToken 
     }}>
       {children}
     </AuthContext.Provider>
