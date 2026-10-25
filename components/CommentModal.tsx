@@ -1,26 +1,29 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Send, Smile, Heart } from "lucide-react";
-import { useAuth } from "@/context/AuthContext"; // <-- Naya Import
+import { X, Smile, Heart } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }: { postId: string, isOpen: boolean, onClose: () => void, onCommentAdded?: () => void }) {
-  const { dbUser } = useAuth(); // <-- Auth hook
+  const { dbUser, user } = useAuth();
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [replyTo, setReplyTo] = useState<{ id: string, userName: string } | null>(null);
   const [expandedReplies, setExpandedReplies] = useState<string[]>([]);
-  const [likedComments, setLikedComments] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Comment ke liye real account chahiye (guest nahi)
+  const canComment = !!dbUser && !user?.isAnonymous;
 
   useEffect(() => {
     if (isOpen && postId) {
+      setError(null);
       fetchComments();
-      const savedLikes = JSON.parse(localStorage.getItem("swybe_liked_comments") || "[]");
-      setLikedComments(savedLikes);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, postId]);
 
   const fetchComments = async () => {
@@ -28,46 +31,67 @@ export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }
       const res = await fetch(`/api/posts/${postId}/comments`);
       const data = await res.json();
       if (data.success) setComments(data.data);
-    } catch (error) { console.log(error); }
+    } catch (err) { console.log(err); }
   };
 
   const handlePost = async () => {
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || !canComment || loading) return;
     setLoading(true);
+    setError(null);
 
     const finalText = replyTo ? `@${replyTo.userName} ${newComment}` : newComment;
-    const userName = dbUser ? dbUser.name : "Guest User"; // <-- Dynamic Name
 
-    const res = await fetch(`/api/posts/${postId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        userName: userName, // <-- Yahan use kiya
-        text: finalText,
-        parentId: replyTo ? replyTo.id : null 
-      }),
-    });
+    try {
+      // Naam server khud DB se lagata hai, client se nahi bhejte
+      const res = await fetch(`/api/posts/${postId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          text: finalText,
+          parentId: replyTo ? replyTo.id : null 
+        }),
+      });
+      const data = await res.json();
 
-    if (res.ok) {
-      setNewComment("");
-      setReplyTo(null);
-      setShowEmoji(false);
-      fetchComments();
-      if (onCommentAdded) onCommentAdded();
+      if (data.success) {
+        setNewComment("");
+        setReplyTo(null);
+        setShowEmoji(false);
+        await fetchComments();
+        if (onCommentAdded) onCommentAdded();
+      } else {
+        setError(data.error || "Comment post nahi hua.");
+      }
+    } catch (err) {
+      setError("Network error. Dobara try karo.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const toggleLikeComment = async (commentId: string) => {
-    const isAlreadyLiked = likedComments.includes(commentId);
-    let updatedLikes = isAlreadyLiked 
-      ? likedComments.filter(id => id !== commentId) 
-      : [...likedComments, commentId];
-      
-    setLikedComments(updatedLikes);
-    localStorage.setItem("swybe_liked_comments", JSON.stringify(updatedLikes));
-    
-    if (!isAlreadyLiked) await fetch(`/api/comments/${commentId}/like`, { method: "POST" });
+    if (!dbUser) return;
+
+    // Optimistic update
+    setComments(prev => prev.map(c =>
+      c._id === commentId
+        ? { ...c, likedByMe: !c.likedByMe, likes: Math.max(0, (c.likes || 0) + (c.likedByMe ? -1 : 1)) }
+        : c
+    ));
+
+    try {
+      const res = await fetch(`/api/comments/${commentId}/like`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setComments(prev => prev.map(c =>
+          c._id === commentId ? { ...c, likedByMe: data.isLiked, likes: data.likes } : c
+        ));
+      } else {
+        fetchComments();
+      }
+    } catch (err) {
+      fetchComments();
+    }
   };
 
   const toggleReplies = (commentId: string) => {
@@ -96,12 +120,12 @@ export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }
     const replies = comments.filter(r => r.parentId === rootId);
     const isMainComment = c._id === rootId;
     const isExpanded = expandedReplies.includes(rootId);
-    const isLiked = likedComments.includes(c._id);
+    const isLiked = !!c.likedByMe;
 
     return (
       <div key={c._id} className="flex gap-3 w-full items-start mt-4">
         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-yellow-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
-          {c.userName.charAt(0)}
+          {c.userName?.charAt(0) || "U"}
         </div>
         
         <div className="flex-1 min-w-0 flex flex-col">
@@ -187,6 +211,12 @@ export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }
             </div>
           )}
 
+          {error && <p className="text-xs text-red-500 font-medium mb-2 px-1">{error}</p>}
+
+          {!canComment && (
+            <p className="text-xs text-gray-500 mb-2 px-1">Comment karne ke liye apne account se login karo (guest mode me nahi).</p>
+          )}
+
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
                 {dbUser?.name?.charAt(0) || "U"}
@@ -196,16 +226,19 @@ export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }
                 ref={inputRef}
                 type="text"
                 value={newComment}
+                maxLength={450}
+                disabled={!canComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
-                className="flex-1 bg-transparent text-sm text-black dark:text-white outline-none"
+                onKeyDown={(e) => { if (e.key === "Enter") handlePost(); }}
+                placeholder={canComment ? "Add a comment..." : "Login to comment"}
+                className="flex-1 bg-transparent text-sm text-black dark:text-white outline-none disabled:opacity-60"
               />
-              <button onClick={() => setShowEmoji(!showEmoji)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+              <button onClick={() => setShowEmoji(!showEmoji)} disabled={!canComment} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50">
                 <Smile className="w-5 h-5" />
               </button>
             </div>
-            <button onClick={handlePost} disabled={loading || !newComment.trim()} className="text-blue-500 font-semibold px-2 disabled:opacity-50">
-              Post
+            <button onClick={handlePost} disabled={loading || !newComment.trim() || !canComment} className="text-blue-500 font-semibold px-2 disabled:opacity-50">
+              {loading ? "..." : "Post"}
             </button>
           </div>
         </div>

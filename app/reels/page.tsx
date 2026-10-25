@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Mousewheel } from "swiper/modules";
 import { Heart, MessageCircle, Send, Bookmark, Volume2, VolumeX } from "lucide-react";
@@ -8,15 +9,19 @@ import CommentModal from "@/components/CommentModal";
 import SaveModal from "@/components/SaveModal";
 import FollowButton from "@/components/FollowButton";
 import { useAuth } from "@/context/AuthContext";
+import { getMediaList, playableVideoUrl } from "@/lib/media";
 import "swiper/css";
 
 interface Reel {
   _id: string;
   title: string;
   caption: string;
-  mediaUrl: string;
+  mediaUrls?: string[];
+  mediaUrl?: string;
+  creatorUid?: string | null;
   creatorName: string;
-  creatorEmail: string;
+  creatorPhotoURL?: string;
+  instagramHandle?: string;
   likes: number;
   comments: number;
   isLiked?: boolean;
@@ -32,13 +37,12 @@ export default function ReelsPage() {
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [activeSavePostId, setActiveSavePostId] = useState<string | null>(null);
 
-  // FIX: dependency array me 'dbUser' (pura object) ki jagah 'dbUser?.firebaseUid' 
-  // (stable string) use kiya hai. Isse follow/like/quiz ke baad reels dobara 
-  // fetch nahi honge aur scroll position reset nahi hogi.
+  // dependency me 'dbUser' (pura object) ki jagah 'dbUser?.firebaseUid' (stable string):
+  // follow/like ke baad reels dobara fetch nahi honge. Login hone par liked states aa jaati hain.
   useEffect(() => {
     async function fetchReels() {
       try {
-        const res = await fetch(`/api/posts?type=reel&userId=${dbUser?.firebaseUid || ""}`, { cache: 'no-store' });
+        const res = await fetch(`/api/posts?type=reel`, { cache: 'no-store' });
         const data = await res.json();
         if (data.success) setReels(data.data);
       } catch (error) {
@@ -65,18 +69,24 @@ export default function ReelsPage() {
 
     setReels((prevReels) => 
       prevReels.map((reel) => 
-        reel._id === id ? { ...reel, likes: isAlreadyLiked ? currentLikes - 1 : currentLikes + 1, isLiked: !isAlreadyLiked } : reel
+        reel._id === id ? { ...reel, likes: isAlreadyLiked ? Math.max(0, currentLikes - 1) : currentLikes + 1, isLiked: !isAlreadyLiked } : reel
       )
     );
 
     try {
-      await fetch(`/api/posts/${id}/like`, { 
+      const res = await fetch(`/api/posts/${id}/like`, { 
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: dbUser.firebaseUid })
+        body: JSON.stringify({})
       });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Like failed");
+
+      // Server ka sach hi final
+      setReels((prev) => prev.map((reel) => reel._id === id ? { ...reel, isLiked: data.isLiked, likes: typeof data.likes === "number" ? data.likes : reel.likes } : reel));
     } catch (error) {
       console.error("Like failed:", error);
+      setReels((prev) => prev.map((reel) => reel._id === id ? { ...reel, likes: currentLikes, isLiked: isAlreadyLiked } : reel));
     }
   };
 
@@ -99,11 +109,22 @@ export default function ReelsPage() {
         <Swiper direction={"vertical"} slidesPerView={1} mousewheel={true} modules={[Mousewheel]} className="w-full h-full">
           {reels.map((reel) => {
             const isLiked = reel.isLiked;
-            const isMyReel = dbUser?.email === reel.creatorEmail;
+            const isMyReel = !!dbUser && !!reel.creatorUid && dbUser.firebaseUid === reel.creatorUid;
+            const videoSrc = playableVideoUrl(getMediaList(reel)[0] || "");
+            const profileHref = reel.creatorUid ? (isMyReel ? "/profile" : `/profile/${reel.creatorUid}`) : null;
+            const avatar = (
+              <div className="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center font-bold text-white overflow-hidden shrink-0">
+                {reel.creatorPhotoURL ? <img src={reel.creatorPhotoURL} alt="" className="w-full h-full object-cover" /> : (reel.creatorName?.charAt(0) || 'U')}
+              </div>
+            );
 
             return (
               <SwiperSlide key={reel._id} className="relative w-full h-full bg-black flex items-center justify-center">
-                <video src={reel.mediaUrl} loop playsInline muted={isMuted} autoPlay className="w-full h-full object-cover" />
+                {videoSrc ? (
+                  <video src={videoSrc} loop playsInline muted={isMuted} autoPlay className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-gray-400 text-sm">Video available nahi hai.</div>
+                )}
 
                 <button onClick={() => setIsMuted(!isMuted)} className="absolute top-4 right-4 bg-black/50 p-2 rounded-full z-10 text-white backdrop-blur-sm hover:bg-black/70 transition">
                   {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
@@ -113,15 +134,19 @@ export default function ReelsPage() {
 
                 <div className="absolute bottom-6 left-4 right-16 z-10 text-white">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center font-bold text-white">
-                      {reel.creatorName?.charAt(0) || 'U'}
-                    </div>
-                    <span className="font-semibold text-sm">{reel.creatorName}</span>
-                    <span className="text-xs text-gray-300">@{reel.creatorEmail?.split('@')[0] || 'user'}</span>
+                    {profileHref ? <Link href={profileHref}>{avatar}</Link> : avatar}
+                    {profileHref ? (
+                      <Link href={profileHref} className="font-semibold text-sm hover:underline truncate">{reel.creatorName}</Link>
+                    ) : (
+                      <span className="font-semibold text-sm truncate">{reel.creatorName}</span>
+                    )}
+                    {reel.instagramHandle && (
+                      <span className="text-xs text-gray-300 truncate">@{reel.instagramHandle.replace('@', '')}</span>
+                    )}
                     
-                    {!isMyReel && (
+                    {!isMyReel && reel.creatorUid && (
                       <div className="ml-2">
-                        <FollowButton targetUserEmail={reel.creatorEmail} initialIsFollowing={!!dbUser?.following?.includes(reel.creatorEmail)} />
+                        <FollowButton targetUserId={reel.creatorUid} variant="overlay" />
                       </div>
                     )}
                   </div>

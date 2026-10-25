@@ -3,36 +3,47 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
-import { Eye, Heart, Users, BarChart3, PlusSquare, PlaySquare, Image as ImageIcon } from "lucide-react";
+import { Eye, Heart, Users, BarChart3, PlusSquare, PlaySquare, Image as ImageIcon, HelpCircle } from "lucide-react";
 import { motion, Variants } from "framer-motion";
+import { getMediaList, isVideoUrl, playableVideoUrl } from "@/lib/media";
 
 export default function CreatorDashboard() {
   const { dbUser } = useAuth();
   const [posts, setPosts] = useState<any[]>([]);
+  const [totals, setTotals] = useState({ posts: 0, likes: 0, views: 0, comments: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const uid = dbUser?.firebaseUid;
 
   useEffect(() => {
-    async function fetchMyPosts() {
-      if (!dbUser) return;
+    if (!uid) return;
+    let cancelled = false;
+
+    async function fetchStats() {
       try {
-        const res = await fetch(`/api/posts?creatorEmail=${dbUser.email}`);
+        const res = await fetch("/api/creator/stats", { cache: "no-store" });
         const data = await res.json();
+        if (cancelled) return;
         if (data.success) {
-          setPosts(data.data);
+          setPosts(data.data.recent);
+          setTotals(data.data.totals);
+        } else {
+          setError(true);
         }
-      } catch (error) {
-        console.error("Error fetching creator posts:", error);
+      } catch (err) {
+        console.error("Error fetching creator stats:", err);
+        if (!cancelled) setError(true);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
-    fetchMyPosts();
-  }, [dbUser]);
+
+    fetchStats();
+    return () => { cancelled = true; };
+  }, [uid]);
 
   if (loading) return <div className="text-center p-10 dark:text-white">Loading Studio...</div>;
-
-  const totalLikes = posts.reduce((acc, post) => acc + (post.likes || 0), 0);
-  const totalViews = posts.reduce((acc, post) => acc + (post.views || 0), 0);
 
   // Animation Variants
   const containerVariants: Variants = {
@@ -77,13 +88,19 @@ export default function CreatorDashboard() {
           </div>
         </motion.div>
 
+        {error && (
+          <motion.div variants={itemVariants} className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 rounded-2xl text-sm text-red-600 dark:text-red-400">
+            Analytics load nahi ho paye. Page refresh karke dekho.
+          </motion.div>
+        )}
+
         {/* --- ANALYTICS CARDS --- */}
         <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col items-center justify-center text-center">
             <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mb-3">
               <Eye className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{totalViews}</h3>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{totals.views}</h3>
             <p className="text-xs text-gray-500 font-medium">Total Views</p>
           </div>
 
@@ -91,7 +108,7 @@ export default function CreatorDashboard() {
             <div className="w-10 h-10 bg-pink-100 dark:bg-pink-900/30 rounded-full flex items-center justify-center mb-3">
               <Heart className="w-5 h-5 text-pink-600 dark:text-pink-400" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{totalLikes}</h3>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{totals.likes}</h3>
             <p className="text-xs text-gray-500 font-medium">Total Likes</p>
           </div>
 
@@ -117,6 +134,7 @@ export default function CreatorDashboard() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <PlaySquare className="w-5 h-5 text-indigo-500" /> Recent Content
+              <span className="text-xs font-medium text-gray-500">({totals.posts} total)</span>
             </h2>
           </div>
 
@@ -131,34 +149,42 @@ export default function CreatorDashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {posts.slice(0, 8).map((post) => (
-                <div key={post._id} className="bg-white dark:bg-zinc-900 rounded-xl overflow-hidden border border-gray-100 dark:border-zinc-800 shadow-sm group cursor-pointer relative aspect-[4/5]">
-                  {post.mediaUrl ? (
-                    post.mediaUrl.includes('.mp4') ? (
-                      <video src={post.mediaUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+              {posts.map((post) => {
+                const first = getMediaList(post)[0];
+                return (
+                  <div key={post._id} className="bg-white dark:bg-zinc-900 rounded-xl overflow-hidden border border-gray-100 dark:border-zinc-800 shadow-sm group cursor-pointer relative aspect-[4/5]">
+                    {first ? (
+                      isVideoUrl(first) ? (
+                        <video src={playableVideoUrl(first)} muted playsInline preload="metadata" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      ) : (
+                        <img src={first} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt={post.title} loading="lazy" />
+                      )
+                    ) : post.isTextPost ? (
+                      <div className={`w-full h-full flex items-center justify-center p-4 text-center text-sm text-white font-bold ${post.backgroundColor || "bg-black"}`}>
+                        <span className="line-clamp-5">{post.caption}</span>
+                      </div>
                     ) : (
-                      <img src={post.mediaUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt={post.title} />
-                    )
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center p-4 bg-gray-50 dark:bg-zinc-800 text-center text-sm text-gray-600 dark:text-gray-300 font-medium">
-                      {post.title}
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-4 bg-gray-50 dark:bg-zinc-800 text-center text-sm text-gray-600 dark:text-gray-300 font-medium">
+                        {post.type === "quiz" && <HelpCircle className="w-6 h-6 text-blue-500" />}
+                        <span className="line-clamp-3">{post.title}</span>
+                      </div>
+                    )}
+                    
+                    {/* Overlay stats */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
+                      <h4 className="text-white font-bold text-sm line-clamp-1">{post.title}</h4>
+                      <div className="flex items-center gap-4 text-white text-xs mt-1">
+                        <span className="flex items-center gap-1"><Heart className="w-3 h-3 fill-white" /> {post.likes || 0}</span>
+                        <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {post.views || 0}</span>
+                      </div>
                     </div>
-                  )}
-                  
-                  {/* Overlay stats */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
-                    <h4 className="text-white font-bold text-sm line-clamp-1">{post.title}</h4>
-                    <div className="flex items-center gap-4 text-white text-xs mt-1">
-                      <span className="flex items-center gap-1"><Heart className="w-3 h-3 fill-white" /> {post.likes || 0}</span>
-                      <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {post.views || 0}</span>
+                    {/* Type badge */}
+                    <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-md text-[10px] font-bold text-white uppercase tracking-wider">
+                      {post.type}
                     </div>
                   </div>
-                  {/* Type badge */}
-                  <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-md text-[10px] font-bold text-white uppercase tracking-wider">
-                    {post.type}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </motion.div>

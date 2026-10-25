@@ -1,20 +1,35 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Heart, MessageCircle, Send, Bookmark, UserPlus, UserCheck, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
+import { useState } from "react";
+import Link from "next/link";
+import { Heart, MessageCircle, Send, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
 import CommentModal from "./CommentModal";
 import SaveModal from "./SaveModal";
+import FollowButton from "./FollowButton";
 import { useAuth } from "@/context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
+import { getMediaList, isVideoUrl, playableVideoUrl } from "@/lib/media";
+
+function timeAgo(dateString?: string) {
+  if (!dateString) return "";
+  const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+  if (seconds < 60) return "Just now";
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  return new Date(dateString).toLocaleDateString();
+}
 
 export default function PostCard({ post }: { post: any }) {
   const { dbUser, refreshUser } = useAuth();
   const [isCommentOpen, setIsCommentOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   
-  const [likesCount, setLikesCount] = useState(post.likes);
-  const [commentsCount, setCommentsCount] = useState(post.comments); 
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [likesCount, setLikesCount] = useState<number>(post.likes || 0);
+  const [commentsCount, setCommentsCount] = useState<number>(post.comments || 0); 
   const [isExpanded, setIsExpanded] = useState(false); 
   const [liked, setLiked] = useState(post.isLiked || false);
   const [saved, setSaved] = useState(post.isSaved || false);
@@ -22,19 +37,45 @@ export default function PostCard({ post }: { post: any }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showHeart, setShowHeart] = useState(false);
 
-  const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null);
-  const [quizResult, setQuizResult] = useState<"correct" | "wrong" | null>(null);
-  const [quizXP, setQuizXP] = useState(0);
+  // QUIZ: pehle se jawab diya ho to server se aaya attempt dikhao (page refresh par bhi)
+  const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(post.quizAttempt ? post.quizAttempt.selectedIndex : null);
+  const [correctQuizIndex, setCorrectQuizIndex] = useState<number | null>(post.quizAttempt ? post.quizAttempt.correctOptionIndex : null);
+  const [quizResult, setQuizResult] = useState<"correct" | "wrong" | null>(post.quizAttempt ? (post.quizAttempt.isCorrect ? "correct" : "wrong") : null);
+  const [quizXP, setQuizXP] = useState<number>(post.quizAttempt?.xpAwarded || 0);
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
 
-  const mediaList = post.mediaUrls && post.mediaUrls.length > 0 ? post.mediaUrls : (post.mediaUrl ? [post.mediaUrl] : []);
+  const mediaList = getMediaList(post);
+
+  // Creator ki profile: apni post ho to /profile, warna /profile/[uid]
+  const isOwnPost = !!dbUser && !!post.creatorUid && post.creatorUid === dbUser.firebaseUid;
+  const profileHref = post.creatorUid ? (isOwnPost ? "/profile" : `/profile/${post.creatorUid}`) : null;
 
   const handleLike = async () => {
     if (!dbUser) return;
-    setLiked(!liked);
-    setLikesCount(liked ? likesCount - 1 : likesCount + 1);
+    const wasLiked = liked;
+    const previousCount = likesCount;
+
+    // Optimistic update
+    setLiked(!wasLiked);
+    setLikesCount(wasLiked ? Math.max(0, previousCount - 1) : previousCount + 1);
+
     try {
-      await fetch(`/api/posts/${post._id}/like`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: dbUser.firebaseUid }) });
-    } catch (error) { console.error("Like failed", error); }
+      const res = await fetch(`/api/posts/${post._id}/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Like failed");
+
+      // Server ka sach hi final
+      setLiked(data.isLiked);
+      if (typeof data.likes === "number") setLikesCount(data.likes);
+    } catch (error) {
+      console.error("Like failed", error);
+      setLiked(wasLiked);
+      setLikesCount(previousCount);
+    }
   };
 
   const handleDoubleTap = () => {
@@ -43,7 +84,6 @@ export default function PostCard({ post }: { post: any }) {
     setTimeout(() => setShowHeart(false), 800);
   };
 
-  // NAYA: SHARE FUNCTION
   const handleShare = async () => {
     const shareUrl = window.location.origin + "/feed?id=" + post._id;
     if (navigator.share) {
@@ -57,16 +97,33 @@ export default function PostCard({ post }: { post: any }) {
   };
 
   const handleQuizSubmit = async (index: number) => {
-    if (!dbUser || selectedQuizOption !== null) return;
-    setSelectedQuizOption(index);
-    const isCorrect = index === post.quizData.correctOptionIndex;
-    if (isCorrect) {
-      setQuizResult("correct");
-      setQuizXP(5); 
-      await fetch(`/api/posts/${post._id}/quiz`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: dbUser.firebaseUid }) });
-      await refreshUser();
-    } else {
-      setQuizResult("wrong");
+    if (!dbUser || selectedQuizOption !== null || quizSubmitting) return;
+    setQuizSubmitting(true);
+
+    try {
+      const res = await fetch(`/api/posts/${post._id}/quiz`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedIndex: index })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        alert(data.error || "Quiz submit nahi hua. Dobara try karo.");
+        return;
+      }
+
+      setSelectedQuizOption(typeof data.selectedIndex === "number" ? data.selectedIndex : index);
+      setCorrectQuizIndex(data.correctOptionIndex);
+      setQuizResult(data.isCorrect ? "correct" : "wrong");
+      setQuizXP(data.xpAwarded || 0);
+
+      if (data.xpAwarded > 0) await refreshUser();
+    } catch (error) {
+      console.error("Quiz submit failed", error);
+      alert("Quiz submit nahi hua. Dobara try karo.");
+    } finally {
+      setQuizSubmitting(false);
     }
   };
 
@@ -78,26 +135,41 @@ export default function PostCard({ post }: { post: any }) {
 
   const cleanInstaHandle = post.instagramHandle ? post.instagramHandle.replace('@', '') : null;
 
+  const avatar = (
+    <div className="w-9 h-9 rounded-full bg-pink-500 flex items-center justify-center text-white font-bold text-sm shrink-0 overflow-hidden">
+      {post.creatorPhotoURL ? (
+        <img src={post.creatorPhotoURL} alt="" className="w-full h-full object-cover" />
+      ) : (
+        post.creatorName?.charAt(0) || 'U'
+      )}
+    </div>
+  );
+
   return (
     <>
       <div id={`post-${post._id}`} className="bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 pb-4 mb-2 w-full">
         
         <div className="flex items-center justify-between p-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-pink-500 flex items-center justify-center text-white font-bold text-sm shrink-0">{post.creatorName?.charAt(0) || 'U'}</div>
+          <div className="flex items-center gap-3 min-w-0">
+            {profileHref ? <Link href={profileHref} className="shrink-0">{avatar}</Link> : avatar}
             <div className="overflow-hidden">
               <h3 className="text-sm font-semibold text-black dark:text-white leading-tight flex items-center gap-1 truncate">
-                {post.creatorName}
+                {profileHref ? (
+                  <Link href={profileHref} className="hover:underline truncate">{post.creatorName}</Link>
+                ) : (
+                  post.creatorName
+                )}
                 {cleanInstaHandle && (<a href={`https://instagram.com/${cleanInstaHandle}`} target="_blank" rel="noreferrer" className="text-[11px] text-pink-500 font-medium hover:underline ml-1">@{cleanInstaHandle}</a>)}
                 <span className="text-[10px] bg-gray-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-gray-500 font-normal ml-1 shrink-0">{post.subject || "General"}</span>
               </h3>
-              <p className="text-xs text-gray-500 truncate">@{post.creatorEmail?.split('@')[0] || 'user'}</p>
+              <p className="text-xs text-gray-500 truncate">{timeAgo(post.createdAt)}</p>
             </div>
           </div>
-          <button onClick={() => setIsFollowing(!isFollowing)} className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition shrink-0 ${isFollowing ? "bg-gray-200 dark:bg-zinc-800 text-black dark:text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
-            {isFollowing ? <UserCheck className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
-            {isFollowing ? "Following" : "Follow"}
-          </button>
+
+          {/* Asli follow button (pehle sirf dikhawe ka tha, refresh par reset ho jata tha) */}
+          {post.creatorUid && !isOwnPost && post.type !== "story" && (
+            <FollowButton targetUserId={post.creatorUid} variant="card" />
+          )}
         </div>
 
         {post.isTextPost ? (
@@ -110,7 +182,7 @@ export default function PostCard({ post }: { post: any }) {
             <div className="flex flex-col gap-3">
               {post.quizData.options.map((opt: string, i: number) => {
                 const isSelected = selectedQuizOption === i;
-                const isCorrect = i === post.quizData.correctOptionIndex;
+                const isCorrect = correctQuizIndex !== null && i === correctQuizIndex;
                 let btnClass = "p-3 rounded-xl border border-gray-200 dark:border-zinc-700 text-left dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition flex justify-between items-center";
                 if (selectedQuizOption !== null) {
                   if (isCorrect) btnClass = "p-3 rounded-xl border border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-left font-semibold flex justify-between items-center";
@@ -118,7 +190,7 @@ export default function PostCard({ post }: { post: any }) {
                   else btnClass = "p-3 rounded-xl border border-gray-200 dark:border-zinc-800 opacity-50 text-left dark:text-white flex justify-between items-center";
                 }
                 return (
-                  <button key={i} onClick={() => handleQuizSubmit(i)} disabled={selectedQuizOption !== null} className={btnClass}>
+                  <button key={i} onClick={() => handleQuizSubmit(i)} disabled={selectedQuizOption !== null || quizSubmitting} className={btnClass}>
                     {opt}
                     {selectedQuizOption !== null && isCorrect && <CheckCircle2 className="w-5 h-5" />}
                     {selectedQuizOption !== null && isSelected && !isCorrect && <XCircle className="w-5 h-5" />}
@@ -128,7 +200,7 @@ export default function PostCard({ post }: { post: any }) {
             </div>
             {quizResult && (
               <div className={`mt-4 text-center font-bold ${quizResult === 'correct' ? 'text-green-500' : 'text-red-500'}`}>
-                {quizResult === 'correct' ? `Correct! +${quizXP} XP` : 'Wrong answer. Try again!'}
+                {quizResult === 'correct' ? `Correct!${quizXP > 0 ? ` +${quizXP} XP` : ''}` : 'Wrong answer.'}
               </div>
             )}
           </div>
@@ -137,7 +209,11 @@ export default function PostCard({ post }: { post: any }) {
             <motion.div className="flex h-full w-full cursor-grab active:cursor-grabbing" drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.2} onDragEnd={handleDragEnd} animate={{ x: `-${currentIndex * 100}%` }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
               {mediaList.map((url: string, index: number) => (
                 <div key={index} className="w-full h-full flex-shrink-0 snap-center pointer-events-none">
-                  {url.includes('.mp4') ? <video src={url} controls className="w-full h-full object-cover pointer-events-auto" /> : <img src={url} alt="Post" className="w-full h-full object-cover" />}
+                  {isVideoUrl(url) ? (
+                    <video src={playableVideoUrl(url)} controls playsInline preload="metadata" className="w-full h-full object-cover pointer-events-auto" />
+                  ) : (
+                    <img src={url} alt="Post" className="w-full h-full object-cover" loading="lazy" />
+                  )}
                 </div>
               ))}
             </motion.div>
@@ -164,7 +240,6 @@ export default function PostCard({ post }: { post: any }) {
           <div className="flex gap-4">
             <button onClick={handleLike} className="flex items-center gap-1"><Heart className={`w-6 h-6 transition ${liked ? "fill-pink-500 text-pink-500" : "text-black dark:text-white"}`} /></button>
             <button onClick={() => setIsCommentOpen(true)} className="flex items-center gap-1"><MessageCircle className="w-6 h-6 text-black dark:text-white" /></button>
-            {/* NAYA: Share Button Fixed */}
             <button onClick={handleShare} className="flex items-center gap-1"><Send className="w-6 h-6 text-black dark:text-white" /></button>
           </div>
           <button onClick={() => setIsSaveModalOpen(true)}><Bookmark className={`w-6 h-6 ${saved ? "fill-black dark:fill-white text-black dark:text-white" : "text-black dark:text-white"}`} /></button>

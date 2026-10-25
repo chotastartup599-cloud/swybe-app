@@ -47,9 +47,6 @@ const UserSchema = new mongoose.Schema({
   
   // Har subject ka watch time (seconds me)
   subjectWatchTime: { type: Object, default: {} }, 
-
-  // NAYA: Quiz replay-farming rokne ke liye - answered quiz post IDs
-  quizzesAnswered: [{ type: String }],
   
   notifications: [{
     message: String,
@@ -61,6 +58,10 @@ const UserSchema = new mongoose.Schema({
   lastActive: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now },
 });
+
+// Indexes: purani posts email se match hoti hain, leaderboard xp se sort hota hai
+UserSchema.index({ email: 1 });
+UserSchema.index({ role: 1, xp: -1 });
 
 const User = mongoose.models.User || mongoose.model('User', UserSchema);
 export default User;

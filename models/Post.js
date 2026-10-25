@@ -8,6 +8,8 @@ const PostSchema = new mongoose.Schema({
   // Type: feed, reel, story, quiz
   type: { type: String, enum: ['feed', 'reel', 'story', 'quiz'], default: 'feed' },
   
+  // NAYA: creator ka Firebase UID (email se zyada safe pehchaan)
+  creatorUid: { type: String },
   creatorName: { type: String, default: 'Guest User' },
   creatorEmail: { type: String },
   instagramHandle: { type: String, default: "" }, // Creator's Insta handle
@@ -37,6 +39,18 @@ const PostSchema = new mongoose.Schema({
   comments: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
 });
+
+// Indexes: feed/reels/profile/search fast rahenge
+PostSchema.index({ type: 1, createdAt: -1 });
+PostSchema.index({ creatorUid: 1, createdAt: -1 });
+PostSchema.index({ creatorEmail: 1, createdAt: -1 });
+PostSchema.index({ subject: 1, createdAt: -1 });
+
+// Expired stories ko 7 din baad DB se apne aap delete kar do (sirf type = story par)
+PostSchema.index(
+  { expiresAt: 1 },
+  { expireAfterSeconds: 7 * 24 * 60 * 60, partialFilterExpression: { type: 'story' } }
+);
 
 const Post = mongoose.models.Post || mongoose.model('Post', PostSchema);
 export default Post;

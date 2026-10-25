@@ -3,6 +3,8 @@ import connectDB from '@/lib/db';
 import User from '@/models/User';
 import { requireAuth, authErrorResponse, serverError } from '@/lib/apiAuth';
 
+const MAX_FOLLOWING = 1000;
+
 export async function POST(req) {
   // Follow ke liye real account chahiye (guest nahi)
   const auth = await requireAuth(req, { allowAnonymous: false });
@@ -10,67 +12,72 @@ export async function POST(req) {
 
   try {
     await connectDB();
-    const { targetUserId, targetUserEmail, action } = await req.json().catch(() => ({}));
+    const { targetUserId, action } = await req.json().catch(() => ({}));
 
     if (action !== 'follow' && action !== 'unfollow') {
-      return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
+    }
+
+    // Sirf UID se follow hota hai (email se nahi, taaki koi email check na kar sake)
+    if (typeof targetUserId !== 'string' || !targetUserId) {
+      return NextResponse.json({ success: false, error: 'Target user required' }, { status: 400 });
     }
 
     // Current user token se, body ka currentUserId ignore
     const currentUserId = auth.uid;
 
-    let targetUser = null;
-    if (typeof targetUserId === 'string' && targetUserId) {
-      targetUser = await User.findOne({ firebaseUid: targetUserId });
-    } else if (typeof targetUserEmail === 'string' && targetUserEmail) {
-      targetUser = await User.findOne({ email: targetUserEmail });
+    if (targetUserId === currentUserId) {
+      return NextResponse.json({ success: false, error: 'Khud ko follow nahi kar sakte.' }, { status: 400 });
     }
 
+    const targetUser = await User.findOne({ firebaseUid: targetUserId }).select('firebaseUid').lean();
     if (!targetUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    const targetUid = targetUser.firebaseUid;
-
-    if (targetUid === currentUserId) {
-      return NextResponse.json({ success: false, error: "Khud ko follow nahi kar sakte." }, { status: 400 });
-    }
-
-    const currentUser = await User.findOne({ firebaseUid: currentUserId }).select('name');
+    const currentUser = await User.findOne({ firebaseUid: currentUserId }).select('name').lean();
     if (!currentUser) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
     if (action === 'follow') {
+      const tooMany = await User.exists({
+        firebaseUid: currentUserId,
+        [`following.${MAX_FOLLOWING - 1}`]: { $exists: true },
+      });
+      if (tooMany) {
+        return NextResponse.json({ success: false, error: `Aap max ${MAX_FOLLOWING} logon ko follow kar sakte ho.` }, { status: 400 });
+      }
+
       const result = await User.updateOne(
-        { firebaseUid: targetUid },
+        { firebaseUid: targetUserId },
         { $addToSet: { followers: currentUserId } }
       );
       await User.updateOne(
         { firebaseUid: currentUserId },
-        { $addToSet: { following: targetUid } }
+        { $addToSet: { following: targetUserId } }
       );
 
       // Notification sirf tab jab sach me nayi follow hui (follow/unfollow spam nahi chalega)
       if (result.modifiedCount === 1) {
         const newNotification = {
           message: `${currentUser.name} started following you`,
-          type: "follow",
+          type: 'follow',
           isRead: false,
           createdAt: new Date(),
         };
         await User.updateOne(
-          { firebaseUid: targetUid },
+          { firebaseUid: targetUserId },
           { $push: { notifications: { $each: [newNotification], $position: 0, $slice: 50 } } }
         );
       }
     } else {
-      await User.updateOne({ firebaseUid: targetUid }, { $pull: { followers: currentUserId } });
-      await User.updateOne({ firebaseUid: currentUserId }, { $pull: { following: targetUid } });
+      await User.updateOne({ firebaseUid: targetUserId }, { $pull: { followers: currentUserId } });
+      await User.updateOne({ firebaseUid: currentUserId }, { $pull: { following: targetUserId } });
     }
 
-    return NextResponse.json({ success: true, message: "Success" }, { status: 200 });
+    return NextResponse.json({ success: true, message: 'Success' }, { status: 200 });
   } catch (error) {
-    return serverError(error, "Follow");
+    return serverError(error, 'Follow');
   }
 }

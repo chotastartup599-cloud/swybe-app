@@ -11,6 +11,10 @@ const CommentSchema = new mongoose.Schema({
     ref: 'Comment',
     default: null, // Agar null hai, matlab ye main comment hai
   },
+  // NAYA: comment karne wale ka Firebase UID
+  userId: {
+    type: String,
+  },
   userName: {
     type: String,
     required: true,
@@ -28,6 +32,9 @@ const CommentSchema = new mongoose.Schema({
     default: Date.now,
   },
 });
+
+CommentSchema.index({ postId: 1, createdAt: -1 });
+CommentSchema.index({ userId: 1, createdAt: -1 });
 
 const Comment = mongoose.models.Comment || mongoose.model('Comment', CommentSchema);
 export default Comment;

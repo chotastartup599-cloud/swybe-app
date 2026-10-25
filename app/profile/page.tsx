@@ -2,59 +2,72 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Settings, Grid, Bookmark, ChevronLeft, ShieldCheck, Play, AtSign, Phone, MapPin } from "lucide-react";
+import { Grid, Bookmark, ChevronLeft, ShieldCheck, Play, AtSign, Phone, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import EditProfileModal from "@/components/EditProfileModal";
+import ProfileGrid from "@/components/ProfileGrid";
+import PostTile from "@/components/PostTile";
 
 export default function ProfilePage() {
   const { dbUser, loading } = useAuth();
   const router = useRouter();
+  const uid: string | undefined = dbUser?.firebaseUid;
 
   const [activeTab, setActiveTab] = useState<"posts" | "reels" | "saved">("posts");
-  const [myPosts, setMyPosts] = useState<any[]>([]);
-  const [myReels, setMyReels] = useState<any[]>([]);
+  const [counts, setCounts] = useState({ postCount: 0, reelCount: 0 });
   const [folders, setFolders] = useState<any[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<any | null>(null);
-  const [fetching, setFetching] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !dbUser) router.push("/auth");
   }, [dbUser, loading, router]);
 
+  // Sahi posts/reels ginti server se
   useEffect(() => {
-    async function fetchProfileData() {
-      if (!dbUser) return;
+    if (!uid) return;
+    let cancelled = false;
+    async function fetchCounts() {
       try {
-        // Fetch Posts & Reels
-        const res = await fetch(`/api/posts?creatorEmail=${dbUser.email}`);
+        const res = await fetch(`/api/users/${uid}`, { cache: "no-store" });
         const data = await res.json();
-        if (data.success) {
-          setMyPosts(data.data.filter((p: any) => p.type === "feed"));
-          setMyReels(data.data.filter((p: any) => p.type === "reel"));
+        if (!cancelled && data.success) {
+          setCounts({ postCount: data.data.postCount || 0, reelCount: data.data.reelCount || 0 });
         }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+    fetchCounts();
+    return () => { cancelled = true; };
+  }, [uid]);
 
-        // Fetch Folders
-        const foldersRes = await fetch(`/api/folders?userId=${dbUser.firebaseUid}`);
-        const foldersData = await foldersRes.json();
-        if (foldersData.success) setFolders(foldersData.data);
-
-        // Record Profile View (Khud ki profile view nahi badhni chahiye, par abhi ke liye skip kar rahe hain)
-        // await fetch("/api/users/view", { method: "POST", body: JSON.stringify({ targetUserId: dbUser.firebaseUid }) });
-
+  // Saved folders sirf tab load hote hain jab Saved tab khulta hai
+  useEffect(() => {
+    if (activeTab !== "saved" || !uid) return;
+    let cancelled = false;
+    async function fetchFolders() {
+      setFoldersLoading(true);
+      try {
+        const res = await fetch("/api/folders", { cache: "no-store" });
+        const data = await res.json();
+        if (!cancelled && data.success) setFolders(data.data);
       } catch (error) {
         console.error(error);
       } finally {
-        setFetching(false);
+        if (!cancelled) setFoldersLoading(false);
       }
     }
-    fetchProfileData();
-  }, [dbUser]);
+    fetchFolders();
+    return () => { cancelled = true; };
+  }, [activeTab, uid]);
 
-  if (loading || fetching) return <div className="h-screen flex items-center justify-center dark:text-white">Loading Profile...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center dark:text-white">Loading Profile...</div>;
   if (!dbUser) return null;
 
   const isVerified = dbUser.role === "master" && dbUser.masterStatus === "approved";
+  const totalPosts = counts.postCount + counts.reelCount;
 
   // Folder view
   if (selectedFolder) {
@@ -73,17 +86,7 @@ export default function ProfilePage() {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {selectedFolder.posts.map((post: any) => (
-                <div key={post._id} className="aspect-square bg-gray-200 dark:bg-zinc-800 relative rounded-lg overflow-hidden">
-                  {post.mediaUrl ? (
-                    post.mediaUrl.includes('.mp4') ? (
-                      <video src={post.mediaUrl} className="w-full h-full object-cover" />
-                    ) : (
-                      <img src={post.mediaUrl} className="w-full h-full object-cover" />
-                    )
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-xs text-gray-500 p-2 text-center line-clamp-3">{post.caption}</div>
-                  )}
-                </div>
+                <PostTile key={post._id} post={post} />
               ))}
             </div>
           )}
@@ -100,7 +103,13 @@ export default function ProfilePage() {
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-10 mb-8">
           {/* Profile Pic */}
           <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-2 border-pink-500 p-1 shrink-0 relative">
-            <img src={dbUser.photoURL || "https://via.placeholder.com/150"} alt="Profile" className="w-full h-full rounded-full object-cover" />
+            {dbUser.photoURL ? (
+              <img src={dbUser.photoURL} alt="Profile" className="w-full h-full rounded-full object-cover" />
+            ) : (
+              <div className="w-full h-full rounded-full bg-pink-500 flex items-center justify-center text-white text-4xl font-bold">
+                {dbUser.name?.charAt(0) || "U"}
+              </div>
+            )}
             {isVerified && (
               <div className="absolute bottom-1 right-1 bg-white dark:bg-black rounded-full p-0.5">
                 <ShieldCheck className="w-6 h-6 text-blue-500" />
@@ -125,7 +134,7 @@ export default function ProfilePage() {
             {/* Stats */}
             <div className="flex justify-center sm:justify-start gap-8 mb-4">
               <div className="text-center sm:text-left">
-                <span className="font-bold text-black dark:text-white block text-lg">{myPosts.length}</span>
+                <span className="font-bold text-black dark:text-white block text-lg">{totalPosts}</span>
                 <span className="text-sm text-gray-500">Posts</span>
               </div>
               <div className="text-center sm:text-left">
@@ -178,57 +187,33 @@ export default function ProfilePage() {
 
         {/* Tab Content */}
         <div className="mt-2">
-          {activeTab === "posts" && (
-            myPosts.length === 0 ? <p className="text-center text-gray-500 mt-10">No posts yet.</p> : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 sm:gap-2">
-                {myPosts.map((post) => (
-                  <div key={post._id} className="aspect-square bg-gray-100 dark:bg-zinc-900 relative group cursor-pointer overflow-hidden rounded-sm sm:rounded-lg">
-                    {post.mediaUrl ? (
-                      post.mediaUrl.includes('.mp4') ? <video src={post.mediaUrl} className="w-full h-full object-cover" /> : <img src={post.mediaUrl} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-xs text-gray-500 p-2 text-center">{post.caption}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )
-          )}
-
-          {activeTab === "reels" && (
-            myReels.length === 0 ? <p className="text-center text-gray-500 mt-10">No reels yet.</p> : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 sm:gap-2">
-                {myReels.map((reel) => (
-                  <div key={reel._id} className="aspect-[9/16] bg-gray-100 dark:bg-zinc-900 relative group cursor-pointer overflow-hidden rounded-sm sm:rounded-lg">
-                    <video src={reel.mediaUrl} className="w-full h-full object-cover" />
-                    <div className="absolute bottom-2 left-2 flex items-center gap-1 text-white font-semibold text-xs bg-black/50 px-2 py-1 rounded-md backdrop-blur-sm">
-                      <Play className="w-3 h-3 fill-white" /> {reel.likes}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )
-          )}
+          {activeTab === "posts" && uid && <ProfileGrid uid={uid} kind="posts" />}
+          {activeTab === "reels" && uid && <ProfileGrid uid={uid} kind="reels" />}
 
           {activeTab === "saved" && (
-            <div className="p-3 grid grid-cols-2 gap-4 max-w-2xl mx-auto">
-              {folders.length === 0 ? (
-                <p className="text-center text-gray-500 col-span-2 mt-10">No saved folders yet.</p>
-              ) : (
-                folders.map((folder) => (
-                  <div 
-                    key={folder._id} 
-                    onClick={() => setSelectedFolder(folder)}
-                    className="bg-white dark:bg-zinc-900 rounded-xl p-4 cursor-pointer hover:shadow-md transition border border-gray-200 dark:border-zinc-800 flex flex-col items-center justify-center gap-2"
-                  >
-                    <div className="w-12 h-12 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center">
-                      <Bookmark className="w-6 h-6 text-pink-500" />
+            foldersLoading ? (
+              <div className="flex justify-center mt-10"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+            ) : (
+              <div className="p-3 grid grid-cols-2 gap-4 max-w-2xl mx-auto">
+                {folders.length === 0 ? (
+                  <p className="text-center text-gray-500 col-span-2 mt-10">No saved folders yet.</p>
+                ) : (
+                  folders.map((folder) => (
+                    <div 
+                      key={folder._id} 
+                      onClick={() => setSelectedFolder(folder)}
+                      className="bg-white dark:bg-zinc-900 rounded-xl p-4 cursor-pointer hover:shadow-md transition border border-gray-200 dark:border-zinc-800 flex flex-col items-center justify-center gap-2"
+                    >
+                      <div className="w-12 h-12 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center">
+                        <Bookmark className="w-6 h-6 text-pink-500" />
+                      </div>
+                      <p className="font-semibold text-black dark:text-white text-sm text-center">{folder.name}</p>
+                      <p className="text-xs text-gray-500">{folder.posts.length} items</p>
                     </div>
-                    <p className="font-semibold text-black dark:text-white text-sm text-center">{folder.name}</p>
-                    <p className="text-xs text-gray-500">{folder.posts.length} items</p>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))
+                )}
+              </div>
+            )
           )}
         </div>
 
