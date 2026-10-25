@@ -1,57 +1,76 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/models/User';
+import { requireAuth, authErrorResponse, serverError, cleanText } from '@/lib/apiAuth';
+
+const PLACEHOLDER_NAMES = ["Guest User", "Student"];
 
 export async function POST(req) {
+  const auth = await requireAuth(req);
+  if (auth.error) return authErrorResponse(auth);
+
   try {
     await connectDB();
-    const body = await req.json();
-    const { firebaseUid, name, email, photoURL } = body;
+    const body = await req.json().catch(() => ({}));
 
-    if (!firebaseUid) {
-      return NextResponse.json({ success: false, error: "Firebase UID is required" }, { status: 400 });
-    }
+    // UID, email, photo SIRF verified token se, body par bharosa nahi
+    const firebaseUid = auth.uid;
+    const email = auth.email || `guest_${firebaseUid}@swybe.com`;
+    const photoURL = auth.decoded.picture || "";
 
-    // 1. Pehle firebaseUid se dhoondho
+    const bodyName = cleanText(body.name, 50);
+    const tokenName = cleanText(auth.decoded.name, 50);
+    const realName = [bodyName, tokenName].find((n) => n && !PLACEHOLDER_NAMES.includes(n)) || "";
+
     let user = await User.findOne({ firebaseUid });
 
-    if (!user) {
-      // 2. Agar UID se nahi mila, toh email se dhoondho (Account Linking)
-      if (email) {
-        user = await User.findOne({ email });
+    // Account linking: sirf tab jab email Firebase ne verify kiya ho
+    if (!user && auth.email) {
+      const existing = await User.findOne({ email });
+      if (existing) {
+        if (!auth.emailVerified) {
+          return NextResponse.json(
+            { success: false, error: "Is email se account pehle se bana hai. Pehle email verify karo ya Google se login karo." },
+            { status: 409 }
+          );
+        }
+        existing.firebaseUid = firebaseUid;
+        if (photoURL) existing.photoURL = photoURL;
+        await existing.save();
+        user = existing;
       }
+    }
 
-      if (user) {
-        // Purana account mil gaya, UID update kar do
-        user.firebaseUid = firebaseUid;
-        if (photoURL) user.photoURL = photoURL;
-        await user.save();
-      } else {
-        // 3. Naya account banao (safe fallbacks ke saath)
+    if (!user) {
+      try {
         user = await User.create({
           firebaseUid,
-          name: name || "Student",
-          email: email || `user_${firebaseUid}@swybe.com`, // Fallback email if missing
-          photoURL: photoURL || "",
+          name: realName || (auth.isAnonymous ? "Guest User" : "Student"),
+          email,
+          photoURL,
           isProfileComplete: false,
         });
+      } catch (error) {
+        // Do requests ek saath aayi to dusri par duplicate error aata hai
+        if (error.code === 11000) user = await User.findOne({ firebaseUid });
+        else throw error;
       }
     } else {
-      // Agar user UID se mil gaya, toh bas photo update karo
-      if (photoURL && user.photoURL !== photoURL) {
-        user.photoURL = photoURL;
-        await user.save();
+      const changes = {};
+      if (photoURL && user.photoURL !== photoURL) changes.photoURL = photoURL;
+      // Signup ke time pehle sync me naam nahi hota, baad me asli naam aa jaata hai
+      if (realName && PLACEHOLDER_NAMES.includes(user.name)) changes.name = realName;
+      if (Object.keys(changes).length > 0) {
+        user = await User.findOneAndUpdate({ firebaseUid }, { $set: changes }, { new: true });
       }
+    }
+
+    if (!user) {
+      return NextResponse.json({ success: false, error: "User create nahi ho paya." }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, data: user }, { status: 200 });
   } catch (error) {
-    console.error("Sync Error Details:", error);
-    // Mongoose validation errors ko print karo
-    if (error.name === 'ValidationError') {
-      const messages = Object.keys(error.errors).map(key => `${key}: ${error.errors[key].message}`);
-      console.error("Validation Details:", messages);
-    }
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return serverError(error, "Sync");
   }
 }

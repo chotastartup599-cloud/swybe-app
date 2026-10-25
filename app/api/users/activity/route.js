@@ -1,64 +1,70 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/models/User';
+import { requireAuth, authErrorResponse, serverError } from '@/lib/apiAuth';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const IST_OFFSET_MS = 330 * 60 * 1000; // India time (UTC+5:30) ke hisaab se din badalta hai
+const DAILY_LOGIN_XP = 5;
+
+const dayIndex = (ms) => Math.floor((ms + IST_OFFSET_MS) / DAY_MS);
+const startOfDayMs = (idx) => idx * DAY_MS - IST_OFFSET_MS;
 
 export async function POST(req) {
+  const auth = await requireAuth(req);
+  if (auth.error) return authErrorResponse(auth);
+
   try {
     await connectDB();
-    const { firebaseUid } = await req.json();
 
-    if (!firebaseUid) {
-      return NextResponse.json({ success: false, error: "UID required" }, { status: 400 });
-    }
-
-    const user = await User.findOne({ firebaseUid });
+    const user = await User.findOne({ firebaseUid: auth.uid });
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    const now = new Date();
-    const lastActive = user.lastActive ? new Date(user.lastActive) : new Date(now.getTime() - 86400000);
-    
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const lastDate = new Date(lastActive.getFullYear(), lastActive.getMonth(), lastActive.getDate()).getTime();
-    
-    const diffDays = Math.round((today - lastDate) / (1000 * 60 * 60 * 24));
+    const nowMs = Date.now();
+    const todayIdx = dayIndex(nowMs);
+    const lastMs = user.lastActive ? new Date(user.lastActive).getTime() : 0;
+    const diffDays = todayIdx - dayIndex(lastMs);
+    const currentStreak = user.streak || 0;
+    const isFirstEver = currentStreak <= 0;
 
-    let newStreak = user.streak || 0;
-    let newBadges = user.badges || [];
-    let newXP = (user.xp || 0) + 5; 
-
-    if (diffDays === 1) {
-      newStreak += 1;
-      if (newStreak === 3 && !newBadges.includes("Streak Starter")) newBadges.push("Streak Starter");
-      if (newStreak === 7 && !newBadges.includes("Week Warrior")) newBadges.push("Week Warrior");
-    } else if (diffDays > 1) {
-      newStreak = 1; 
-    } else if (diffDays === 0 && newStreak === 0) {
-      newStreak = 1;
+    // Aaj ka XP/streak ho chuka hai to kuch mat badlo (page reload se XP nahi milega)
+    if (diffDays <= 0 && !isFirstEver) {
+      return NextResponse.json({ success: true, data: user }, { status: 200 });
     }
 
-    if (user.isProfileComplete && !newBadges.includes("First Step")) {
-      newBadges.push("First Step");
+    const newStreak = diffDays === 1 ? currentStreak + 1 : 1;
+
+    const badgesToAdd = [];
+    if (newStreak >= 3) badgesToAdd.push("Streak Starter");
+    if (newStreak >= 7) badgesToAdd.push("Week Warrior");
+    if (user.isProfileComplete) badgesToAdd.push("First Step");
+
+    // Atomic filter: do tabs ek saath aaye to bhi XP sirf ek baar jayega
+    const filter = {
+      _id: user._id,
+      $or: [
+        { lastActive: { $lt: new Date(startOfDayMs(todayIdx)) } },
+        { lastActive: { $exists: false } },
+        { streak: { $lte: 0 } },
+        { streak: { $exists: false } },
+      ],
+    };
+
+    const update = {
+      $set: { streak: newStreak, lastActive: new Date(nowMs) },
+      $inc: { xp: DAILY_LOGIN_XP },
+    };
+    if (badgesToAdd.length > 0) {
+      update.$addToSet = { badges: { $each: badgesToAdd } };
     }
 
-    // FIX: user.save() ki jagah direct update karo (Validation error se bachne ke liye)
-    const updatedUser = await User.findByIdAndUpdate(
-      user._id,
-      { 
-        $set: { 
-          streak: newStreak, 
-          xp: newXP, 
-          badges: newBadges, 
-          lastActive: now 
-        } 
-      },
-      { new: true }
-    );
+    const updated = await User.findOneAndUpdate(filter, update, { new: true });
+    const result = updated || (await User.findById(user._id));
 
-    return NextResponse.json({ success: true, data: updatedUser }, { status: 200 });
+    return NextResponse.json({ success: true, data: result }, { status: 200 });
   } catch (error) {
-    console.error("Activity API Error Details:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return serverError(error, "Activity");
   }
 }

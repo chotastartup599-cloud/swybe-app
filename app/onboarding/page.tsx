@@ -9,13 +9,12 @@ export default function OnboardingPage() {
   const { dbUser, loading } = useAuth();
   const router = useRouter();
 
-  // Agar user pehle se profile complete kar chuka hai, toh use home bhej do
   useEffect(() => {
     if (!loading && dbUser?.isProfileComplete) {
       router.push("/");
     }
     if (!loading && !dbUser) {
-      router.push("/"); // Agar login nahi hai toh home bhej do
+      router.push("/auth");
     }
   }, [dbUser, loading, router]);
 
@@ -32,7 +31,7 @@ export default function OnboardingPage() {
       <div className="w-full max-w-md flex flex-col gap-4">
         {/* Student Card */}
         <div 
-          onClick={() => router.push("/onboarding/student")}
+          onClick={() => router.push("/onboarding/learner")}
           className="group bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-6 cursor-pointer hover:border-pink-500 dark:hover:border-pink-500 transition-all hover:shadow-lg"
         >
           <div className="flex items-center justify-between">

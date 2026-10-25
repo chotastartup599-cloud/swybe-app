@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { auth, provider } from "@/lib/firebase";
+import { installAuthFetch } from "@/lib/authFetch";
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
@@ -12,6 +13,11 @@ import {
   updateProfile,
   User 
 } from "firebase/auth";
+
+// Module load hote hi install ho jaye, taaki koi bhi component ki request token ke bina na jaye
+if (typeof window !== "undefined") {
+  installAuthFetch();
+}
 
 interface AuthContextType {
   user: User | null;
@@ -46,29 +52,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Sync + Create user in DB (sirf login/signup ke time chalta hai)
+  // Sync + Create user in DB (login/signup/app-load par chalta hai)
   const syncUserWithDB = async (firebaseUser: User) => {
     try {
       const res = await fetch('/api/users/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          firebaseUid: firebaseUser.uid,
           name: firebaseUser.displayName || "Guest User",
-          email: firebaseUser.email || `guest_${firebaseUser.uid}@swybe.com`,
-          photoURL: firebaseUser.photoURL || "",
         }),
       });
       const data = await res.json();
+
+      // Email conflict: is email se pehle se alag account hai aur email verified nahi hai
+      if (res.status === 409) {
+        alert(data.error);
+        await signOut(auth);
+        setDbUser(null);
+        return;
+      }
       
       if (data.success) {
         setDbUser(data.data);
         
-        // Streak/XP sirf ek baar yahan update hota hai (login/app-load ke time)
+        // Streak/XP: server din me sirf ek baar hi badhata hai
         const activityRes = await fetch('/api/users/activity', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ firebaseUid: firebaseUser.uid })
+          body: JSON.stringify({})
         });
         const activityData = await activityRes.json();
         if (activityData.success) setDbUser(activityData.data);
@@ -103,8 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // FIX: Ab ye sirf fresh data fetch karta hai, XP/Streak badhाता NAHI
-  // Isko follow/unfollow, edit-profile, quiz-answer jaise jagah use karo
+  // Sirf fresh data fetch karta hai, XP/Streak nahi badhata
   const refreshUser = async () => {
     if (user) await fetchDbUser(user.uid);
   };
