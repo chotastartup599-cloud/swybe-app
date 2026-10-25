@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Heart, MessageCircle, Send, Bookmark, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
 import CommentModal from "./CommentModal";
@@ -9,6 +9,7 @@ import FollowButton from "./FollowButton";
 import { useAuth } from "@/context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { getMediaList, isVideoUrl, playableVideoUrl } from "@/lib/media";
+import { useWatchTracker } from "@/lib/useWatchTracker";
 
 function timeAgo(dateString?: string) {
   if (!dateString) return "";
@@ -43,6 +44,23 @@ export default function PostCard({ post }: { post: any }) {
   const [quizResult, setQuizResult] = useState<"correct" | "wrong" | null>(post.quizAttempt ? (post.quizAttempt.isCorrect ? "correct" : "wrong") : null);
   const [quizXP, setQuizXP] = useState<number>(post.quizAttempt?.xpAwarded || 0);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
+
+  // Post jab screen par dikhti hai (50%+), tab ka time ginte hain
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setVisible(entry.isIntersecting),
+      { threshold: 0.5 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useWatchTracker(post._id, visible, !!dbUser);
 
   const mediaList = getMediaList(post);
 
@@ -85,7 +103,8 @@ export default function PostCard({ post }: { post: any }) {
   };
 
   const handleShare = async () => {
-    const shareUrl = window.location.origin + "/feed?id=" + post._id;
+    const path = post.type === "reel" ? "/reels?id=" : "/feed?id=";
+    const shareUrl = window.location.origin + path + post._id;
     if (navigator.share) {
       try {
         await navigator.share({ title: post.title, text: post.caption, url: shareUrl });
@@ -147,7 +166,7 @@ export default function PostCard({ post }: { post: any }) {
 
   return (
     <>
-      <div id={`post-${post._id}`} className="bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 pb-4 mb-2 w-full">
+      <div ref={cardRef} id={`post-${post._id}`} className="bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 pb-4 mb-2 w-full">
         
         <div className="flex items-center justify-between p-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -166,7 +185,6 @@ export default function PostCard({ post }: { post: any }) {
             </div>
           </div>
 
-          {/* Asli follow button (pehle sirf dikhawe ka tha, refresh par reset ho jata tha) */}
           {post.creatorUid && !isOwnPost && post.type !== "story" && (
             <FollowButton targetUserId={post.creatorUid} variant="card" />
           )}
@@ -259,7 +277,7 @@ export default function PostCard({ post }: { post: any }) {
       </div>
 
       <CommentModal postId={post._id} isOpen={isCommentOpen} onClose={() => setIsCommentOpen(false)} onCommentAdded={() => setCommentsCount((prev: number) => prev + 1)} />
-      <SaveModal postId={post._id} isOpen={isSaveModalOpen} onClose={() => { setIsSaveModalOpen(false); setSaved(true); }} />
+      <SaveModal postId={post._id} isOpen={isSaveModalOpen} onClose={() => setIsSaveModalOpen(false)} onSavedChange={setSaved} />
     </>
   );
 }

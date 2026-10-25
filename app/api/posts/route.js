@@ -14,7 +14,7 @@ import {
   cleanList,
   isApprovedCreator,
 } from '@/lib/apiAuth';
-import { escapeRegex, stripQuizAnswer } from '@/lib/helpers';
+import { escapeRegex, stripQuizAnswer, isObjectId } from '@/lib/helpers';
 
 const POST_TYPES = ['feed', 'reel', 'story', 'quiz'];
 const MAX_LIMIT = 20;
@@ -41,11 +41,13 @@ export async function GET(req) {
 
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type');
+    const postId = searchParams.get('id');
     const excludeTypes = (searchParams.get('excludeTypes') || '')
       .split(',')
       .map((t) => t.trim())
       .filter((t) => POST_TYPES.includes(t));
     const creatorUid = cleanText(searchParams.get('creatorUid') || '', 128);
+    const subject = cleanText(searchParams.get('subject') || '', 40);
     const interests = (searchParams.get('interests') || '')
       .split(',')
       .map((s) => s.trim())
@@ -64,6 +66,14 @@ export async function GET(req) {
     const and = [];
     const now = new Date();
 
+    // Share link: ek specific post
+    if (postId) {
+      if (!isObjectId(postId)) {
+        return NextResponse.json({ success: false, error: 'Invalid post id' }, { status: 400 });
+      }
+      query._id = postId;
+    }
+
     if (type) {
       if (!POST_TYPES.includes(type)) {
         return NextResponse.json({ success: false, error: 'Invalid type' }, { status: 400 });
@@ -71,6 +81,11 @@ export async function GET(req) {
       query.type = type;
     } else if (excludeTypes.length > 0) {
       query.type = { $nin: excludeTypes };
+    }
+
+    // Subject filter server par (pehle client page ke 10 posts me se chhaanta tha)
+    if (subject) {
+      and.push({ subject: { $regex: `^${escapeRegex(subject)}$`, $options: 'i' } });
     }
 
     // Kisi creator ki posts: nayi posts creatorUid se, purani posts (jinme uid nahi) email se match hoti hain.
@@ -120,7 +135,7 @@ export async function GET(req) {
       .limit(limit)
       .lean();
 
-    if (interests.length > 0 && !creatorUid && !searchQuery && type !== 'story' && !followingOnly) {
+    if (interests.length > 0 && !postId && !creatorUid && !searchQuery && type !== 'story' && !followingOnly) {
       posts = posts.sort((a, b) => {
         const aMatch = interests.includes(a.subject) || (a.tags || []).some((t) => interests.includes(t));
         const bMatch = interests.includes(b.subject) || (b.tags || []).some((t) => interests.includes(t));

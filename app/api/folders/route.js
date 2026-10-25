@@ -11,13 +11,18 @@ export async function GET(req) {
 
   try {
     await connectDB();
+    const { searchParams } = new URL(req.url);
+    const light = searchParams.get('light') === '1';
 
-    // Sirf apne folders (query ka userId ignore). Quiz ka sahi jawab populate me bhi nahi jaata.
-    const folders = await Folder.find({ userId: auth.uid })
-      .populate({ path: 'posts', select: '-quizData.correctOptionIndex' })
-      .sort({ createdAt: -1 })
-      .lean();
+    // Sirf apne folders (query ka userId ignore)
+    let query = Folder.find({ userId: auth.uid }).sort({ createdAt: -1 });
 
+    // light=1: posts sirf IDs ki list (save modal ke liye). Warna poori posts, par quiz ka sahi jawab nahi.
+    if (!light) {
+      query = query.populate({ path: 'posts', select: '-quizData.correctOptionIndex' });
+    }
+
+    const folders = await query.lean();
     return NextResponse.json({ success: true, data: folders }, { status: 200 });
   } catch (error) {
     return serverError(error, 'FoldersGet');
