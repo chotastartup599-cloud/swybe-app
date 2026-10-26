@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
 
+   serverExternalPackages: ["firebase-admin"],
   typescript: {
     // Abhi build tootne se bachane ke liye errors ignore hote hain (jaise pehle).
     // Asli errors dekhne ke liye STRICT_BUILD=true ke saath build chalao (neeche notes me tarika hai).
