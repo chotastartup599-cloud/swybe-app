@@ -1,36 +1,71 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import StoryViewer from "./StoryViewer";
-import { Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 export default function StoriesBar() {
-  const { dbUser } = useAuth();
+  const { dbUser, loading: authLoading } = useAuth();
   const router = useRouter();
-  
+  const uid: string | undefined = dbUser?.firebaseUid;
+
   const [stories, setStories] = useState<any[]>([]);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [initialIndex, setInitialIndex] = useState(0);
+  const [initialGroupIndex, setInitialGroupIndex] = useState(0);
 
+  // Login ka result aane ke baad fetch, taaki "liked" states sahi aayein
   useEffect(() => {
+    if (authLoading) return;
+    let cancelled = false;
+
     async function fetchStories() {
       try {
-        const res = await fetch('/api/posts?type=story');
+        const res = await fetch("/api/posts?type=story&limit=20", { cache: "no-store" });
         const data = await res.json();
-        if (data.success) {
-          setStories(data.data);
-        }
+        if (!cancelled && data.success) setStories(data.data);
       } catch (error) {
         console.error("Failed to load stories");
       }
     }
-    fetchStories();
-  }, []);
 
-  const handleStoryClick = (index: number) => {
-    setInitialIndex(index);
+    fetchStories();
+    return () => { cancelled = true; };
+  }, [authLoading, uid]);
+
+  // Ek creator = ek circle. Ek group ke andar purani story pehle, nayi baad me.
+  const groups = useMemo(() => {
+    const map = new Map<string, any>();
+    [...stories].reverse().forEach((story) => {
+      const key = story.creatorUid || story.creatorName || story._id;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          creatorUid: story.creatorUid,
+          creatorName: story.creatorName,
+          creatorPhotoURL: story.creatorPhotoURL,
+          stories: [],
+          latest: 0,
+        });
+      }
+      const group = map.get(key);
+      group.stories.push(story);
+      group.latest = Math.max(group.latest, new Date(story.createdAt).getTime() || 0);
+    });
+
+    const list = Array.from(map.values());
+    list.sort((a, b) => {
+      const aMine = a.creatorUid && a.creatorUid === uid ? 1 : 0;
+      const bMine = b.creatorUid && b.creatorUid === uid ? 1 : 0;
+      if (aMine !== bMine) return bMine - aMine; // apni story sabse pehle
+      return b.latest - a.latest;
+    });
+    return list;
+  }, [stories, uid]);
+
+  const handleOpen = (index: number) => {
+    setInitialGroupIndex(index);
     setViewerOpen(true);
   };
 
@@ -48,35 +83,33 @@ export default function StoriesBar() {
               <span className="text-[11px] font-medium dark:text-gray-300">Your Story</span>
            </div>
 
-           {/* Real Stories */}
-           {stories.map((story, i) => (
-             <div key={story._id} onClick={() => handleStoryClick(i)} className="flex flex-col items-center gap-1 cursor-pointer shrink-0">
+           {/* Creator-wise Stories */}
+           {groups.map((group, i) => (
+             <div key={group.key} onClick={() => handleOpen(i)} className="flex flex-col items-center gap-1 cursor-pointer shrink-0">
                 <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-[3px]">
                    <div className="w-full h-full rounded-full bg-white dark:bg-black p-[2px]">
                      <div className="w-full h-full rounded-full bg-gray-200 dark:bg-zinc-800 flex items-center justify-center text-xl font-bold text-gray-600 dark:text-gray-300 overflow-hidden">
-                        {story.mediaUrls && story.mediaUrls.length > 0 ? (
-                          story.mediaUrls[0].includes('.mp4') ? (
-                            <video src={story.mediaUrls[0]} className="w-full h-full object-cover" />
-                          ) : (
-                            <img src={story.mediaUrls[0]} alt="S" className="w-full h-full object-cover" />
-                          )
+                        {group.creatorPhotoURL ? (
+                          <img src={group.creatorPhotoURL} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          story.creatorName?.charAt(0)
+                          group.creatorName?.charAt(0) || "U"
                         )}
                      </div>
                    </div>
                 </div>
-                <span className="text-[11px] font-medium dark:text-gray-300 truncate w-16 text-center">{story.creatorName?.split(' ')[0]}</span>
+                <span className="text-[11px] font-medium dark:text-gray-300 truncate w-16 text-center">
+                  {group.creatorUid && group.creatorUid === uid ? "You" : group.creatorName?.split(" ")[0]}
+                </span>
              </div>
            ))}
         </div>
       </div>
 
-      {viewerOpen && (
-        <StoryViewer 
-          stories={stories} 
-          initialIndex={initialIndex} 
-          onClose={() => setViewerOpen(false)} 
+      {viewerOpen && groups.length > 0 && (
+        <StoryViewer
+          groups={groups}
+          initialGroupIndex={Math.min(initialGroupIndex, groups.length - 1)}
+          onClose={() => setViewerOpen(false)}
         />
       )}
     </>

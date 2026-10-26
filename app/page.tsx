@@ -9,7 +9,7 @@ import { motion, Variants } from "framer-motion";
 import CreatorDashboard from "@/components/CreatorDashboard";
 
 export default function Dashboard() {
-  const { dbUser, loading, logout } = useAuth();
+  const { dbUser, user, loading, logout } = useAuth();
   const router = useRouter();
 
   const [blocks, setBlocks] = useState<any[]>([]);
@@ -18,9 +18,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!loading && !dbUser) {
-      router.push("/auth");
+      router.replace("/auth");
     } else if (!loading && dbUser && !dbUser.isProfileComplete) {
-      router.push("/onboarding");
+      router.replace("/onboarding");
     }
   }, [dbUser, loading, router]);
 
@@ -30,7 +30,7 @@ export default function Dashboard() {
         const res = await fetch("/api/admin/blocks");
         const data = await res.json();
         if (data.success) {
-          setBlocks(data.data.filter((b: any) => b.isVisible));
+          setBlocks(data.data.filter((b: any) => b.isVisible !== false));
         }
       } catch (error) {
         console.error("Error fetching blocks");
@@ -42,19 +42,21 @@ export default function Dashboard() {
   }, []);
 
   const handleShareToStory = async (captionText: string, gradientClass: string) => {
-    if (!dbUser) return;
+    if (!dbUser || sharing) return;
+    if (user?.isAnonymous) {
+      alert("Story share karne ke liye apne account se login karo (guest mode me nahi).");
+      return;
+    }
     setSharing(true);
     
     try {
+      // Naam/email server khud token se lagata hai
       const payload = {
         title: "Achievement Unlocked",
         caption: captionText,
         type: "story",
-        creatorName: dbUser.name,
-        creatorEmail: dbUser.email,
         isTextPost: true,
         backgroundColor: gradientClass,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         subject: "Achievement",
         classLevel: "General"
       };
@@ -69,7 +71,7 @@ export default function Dashboard() {
       if (data.success) {
         alert("🎉 Story shared successfully! Check the top of your Feed.");
       } else {
-        alert("Failed to share story.");
+        alert(data.error || "Failed to share story.");
       }
     } catch (error) {
       console.error(error);
@@ -83,7 +85,9 @@ export default function Dashboard() {
     alert("Coming Soon! Class Code feature is under development.");
   };
 
-  if (loading || !dbUser) return <div className="h-screen flex items-center justify-center dark:text-white">Loading...</div>;
+  if (loading || !dbUser || !dbUser.isProfileComplete) {
+    return <div className="h-screen flex items-center justify-center dark:text-white"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+  }
 
   if (dbUser.role === "master" && dbUser.masterStatus === "pending") {
     return (
@@ -108,8 +112,12 @@ export default function Dashboard() {
             <XCircle className="w-10 h-10 text-red-600 dark:text-red-400" />
           </div>
           <h1 className="text-2xl font-bold text-black dark:text-white mb-2">Application Rejected</h1>
-          <p className="text-gray-500 text-sm mb-8">Your application was not approved. Please contact support.</p>
-          <button onClick={() => router.push("/onboarding")} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold hover:bg-blue-700 transition w-full">Try Again</button>
+          <p className="text-gray-500 text-sm mb-8">Your application was not approved. You can update your details and apply again, or continue as a learner.</p>
+          <div className="flex flex-col gap-3">
+            <button onClick={() => router.push("/onboarding/creator?reapply=1")} className="bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold hover:bg-blue-700 transition w-full">Apply Again</button>
+            <button onClick={() => router.push("/onboarding/learner?edit=1")} className="bg-gray-200 dark:bg-zinc-800 text-black dark:text-white px-6 py-2 rounded-xl font-semibold hover:bg-gray-300 dark:hover:bg-zinc-700 transition w-full">Continue as Learner</button>
+            <button onClick={logout} className="text-sm text-gray-500 hover:underline">Logout</button>
+          </div>
         </div>
       </div>
     );
@@ -120,18 +128,21 @@ export default function Dashboard() {
   }
 
   const details = dbUser.learnerDetails || {};
-  
-  let displaySubjects: string[] = [];
-  if (dbUser.profileType === "school") {
-    displaySubjects = details.stream && details.stream.length > 0 ? details.stream : ["General Study"];
-  } else {
-    displaySubjects = details.subjects && details.subjects.length > 0 ? details.subjects : ["General Study"];
-  }
+
+  // Subjects: ab school students se bhi subjects poochhe jaate hain. Purane school users ke
+  // sirf stream hote hain, unhe dikhate hain par subject-filter link nahi dete (match hi nahi hota).
+  const realSubjects: string[] = details.subjects && details.subjects.length > 0 ? details.subjects : [];
+  const streamFallback: string[] = dbUser.profileType === "school" && details.stream && details.stream.length > 0 ? details.stream : [];
+  const hasRealSubjects = realSubjects.length > 0;
+  const displaySubjects: string[] = hasRealSubjects ? realSubjects : (streamFallback.length > 0 ? streamFallback : ["General Study"]);
 
   const hobbies = details.hobbies || [];
   const targets = details.targets || [];
   const allInterests = [...targets, ...hobbies];
   const badges = dbUser.badges || [];
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   const containerVariants: Variants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };
   const itemVariants: Variants = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } } };
@@ -146,7 +157,7 @@ export default function Dashboard() {
           <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-center gap-6">
             <div>
               <p className="text-sm font-semibold tracking-wider text-blue-100 uppercase mb-2 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Your Study Hub</p>
-              <h2 className="text-3xl sm:text-4xl font-extrabold mb-2">Good morning, {dbUser.name?.split(' ')[0] || "Learner"} 👋</h2>
+              <h2 className="text-3xl sm:text-4xl font-extrabold mb-2">{greeting}, {dbUser.name?.split(' ')[0] || "Learner"} 👋</h2>
               <p className="text-blue-100 text-sm sm:text-base">
                 {dbUser.profileType === "school" ? `${details.schoolClass || "Class"} • Let's start a streak today.` : `${details.competitiveExams?.join(", ") || "Exams"} • Let's start a streak today.`}
               </p>
@@ -185,7 +196,7 @@ export default function Dashboard() {
 
           <motion.div whileHover={{ y: -5 }} className="bg-gradient-to-br from-[#66BB6A] to-[#43A047] rounded-3xl p-6 text-white shadow-md relative overflow-hidden cursor-pointer">
             <div className="flex justify-between items-start mb-4"><div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm"><Target className="w-6 h-6" /></div><span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full backdrop-blur-sm">SUBJECTS</span></div>
-            <h3 className="text-4xl font-extrabold mb-1">{displaySubjects.length}</h3><p className="text-white/80 text-sm">Topics to conquer</p>
+            <h3 className="text-4xl font-extrabold mb-1">{hasRealSubjects ? realSubjects.length : displaySubjects.length}</h3><p className="text-white/80 text-sm">Topics to conquer</p>
           </motion.div>
         </motion.div>
 
@@ -195,7 +206,7 @@ export default function Dashboard() {
             <h2 className="text-lg font-bold text-gray-800 dark:text-gray-200 mb-3 flex items-center gap-2"><ExternalLink className="w-5 h-5 text-blue-500" /> Study Resources</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {blocks.map((block: any, idx: number) => (
-                <a key={idx} href={block.url} target="_blank" rel="noreferrer" className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col items-center justify-center gap-2 hover:shadow-md transition group">
+                <a key={block._id || idx} href={block.url} target="_blank" rel="noreferrer" className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-gray-100 dark:border-zinc-800 shadow-sm flex flex-col items-center justify-center gap-2 hover:shadow-md transition group">
                   <span className="text-3xl group-hover:scale-110 transition-transform">{block.icon}</span>
                   <span className="font-semibold text-sm dark:text-white text-center">{block.title}</span>
                 </a>
@@ -236,18 +247,18 @@ export default function Dashboard() {
 
         {/* YOUR SUBJECTS (With Real Watch Time) */}
         <motion.div variants={itemVariants}>
-          <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2"><BookOpen className="w-5 h-5 text-pink-500" /> Your Subjects</h2><Link href="/onboarding/learner" className="text-sm text-blue-500 font-semibold hover:underline">Edit</Link></div>
+          <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2"><BookOpen className="w-5 h-5 text-pink-500" /> Your Subjects</h2><Link href="/onboarding/learner?edit=1" className="text-sm text-blue-500 font-semibold hover:underline">Edit</Link></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {displaySubjects.map((subject, index) => {
               const colors = ["from-purple-500 to-indigo-500", "from-orange-400 to-red-500", "from-green-400 to-emerald-600", "from-blue-400 to-cyan-500"];
               const color = colors[index % colors.length];
               
-              // NAYA: Watch Time calculation
               const watchedSeconds = dbUser.subjectWatchTime?.[subject] || 0;
               const watchedMinutes = Math.floor(watchedSeconds / 60);
+              const feedHref = hasRealSubjects ? `/feed?subject=${encodeURIComponent(subject)}` : "/feed";
 
               return (
-                <motion.div key={index} whileHover={{ y: -5, scale: 1.01 }} className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-gray-100 dark:border-zinc-800 shadow-sm relative overflow-hidden group hover:shadow-lg transition-shadow cursor-pointer">
+                <motion.div key={`${subject}-${index}`} whileHover={{ y: -5, scale: 1.01 }} className="bg-white dark:bg-zinc-900 rounded-2xl p-5 border border-gray-100 dark:border-zinc-800 shadow-sm relative overflow-hidden group hover:shadow-lg transition-shadow cursor-pointer">
                   <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${color}`}></div>
                   <div className="flex justify-between items-start mb-6">
                     <div className="flex items-center gap-4">
@@ -259,7 +270,7 @@ export default function Dashboard() {
                     <span className="text-gray-500 text-xs flex items-center gap-1">
                       <Clock className="w-3 h-3"/> {watchedMinutes}m watched
                     </span>
-                    <Link href={`/feed?subject=${subject}`} className="text-blue-500 font-semibold flex items-center gap-1 group-hover:gap-2 transition-all">Open <ChevronRight className="w-4 h-4" /></Link>
+                    <Link href={feedHref} className="text-blue-500 font-semibold flex items-center gap-1 group-hover:gap-2 transition-all">Open <ChevronRight className="w-4 h-4" /></Link>
                   </div>
                 </motion.div>
               );

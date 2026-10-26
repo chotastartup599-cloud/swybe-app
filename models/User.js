@@ -48,9 +48,10 @@ const UserSchema = new mongoose.Schema({
   // Har subject ka watch time (seconds me)
   subjectWatchTime: { type: Object, default: {} }, 
   
+  // NOTE: "type" naam ki field Mongoose me special hoti hai, isliye { type: { type: String } } likha hai
   notifications: [{
-    message: String,
-    type: String, 
+    message: { type: String },
+    type: { type: String },
     isRead: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
   }],

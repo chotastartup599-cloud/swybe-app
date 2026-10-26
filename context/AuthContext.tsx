@@ -6,10 +6,13 @@ import { installAuthFetch } from "@/lib/authFetch";
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithRedirect,
   signInAnonymously, 
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile,
   User 
 } from "firebase/auth";
@@ -27,6 +30,7 @@ interface AuthContextType {
   loginAsGuest: () => Promise<void>;
   signupWithEmail: (name: string, email: string, password: string) => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   getToken: () => Promise<string | null>;
@@ -120,8 +124,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginWithGoogle = async () => {
-    try { await signInWithPopup(auth, provider); } 
-    catch (error) { console.error("Google Login Error:", error); throw error; }
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error: any) {
+      // Popup block ho gaya (mobile / kuch browsers): redirect se try karo
+      if (
+        error?.code === "auth/popup-blocked" ||
+        error?.code === "auth/operation-not-supported-in-this-environment"
+      ) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+      console.error("Google Login Error:", error);
+      throw error;
+    }
   };
 
   const loginAsGuest = async () => {
@@ -133,6 +149,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(userCredential.user, { displayName: name });
+
+      // Verification email (fail ho to signup nahi rukta)
+      try { await sendEmailVerification(userCredential.user); } catch (error) { console.error("Verification email error:", error); }
+
       await syncUserWithDB(userCredential.user);
     } catch (error: any) {
       console.error("Signup Error:", error);
@@ -149,6 +169,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const resetPassword = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error: any) {
+      console.error("Reset Password Error:", error);
+      throw new Error(error.message);
+    }
+  };
+
   const logout = async () => {
     try { await signOut(auth); setDbUser(null); } 
     catch (error) { console.error("Logout Error:", error); }
@@ -156,7 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user, dbUser, loading, loginWithGoogle, loginAsGuest, signupWithEmail, loginWithEmail, logout, refreshUser, getToken 
+      user, dbUser, loading, loginWithGoogle, loginAsGuest, signupWithEmail, loginWithEmail, resetPassword, logout, refreshUser, getToken 
     }}>
       {children}
     </AuthContext.Provider>
