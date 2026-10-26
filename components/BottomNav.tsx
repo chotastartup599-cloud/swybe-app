@@ -1,25 +1,44 @@
 "use client";
 
-import Link from 'next/link';
-import { LayoutDashboard, Home, Search, MessageSquare, Clapperboard, User, Trophy } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, Home, Search, Clapperboard, User, Trophy, PlusSquare } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 export default function BottomNav() {
-  const pathname = usePathname();
+  const pathname = usePathname() || "/";
+  const { user } = useAuth();
+  const isGuest = !!user?.isAnonymous;
 
-  const getIconClass = (path: string) => {
-    const isActive = pathname === path;
-    return `w-6 h-6 ${isActive ? 'text-black dark:text-white' : 'text-gray-500 dark:text-gray-400'}`;
-  };
+  // Guest post nahi bana sakta, to uske liye Create ki jagah Leaderboard
+  const items = [
+    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/feed", label: "Feed", icon: Home },
+    isGuest
+      ? { href: "/leaderboard", label: "Leaderboard", icon: Trophy }
+      : { href: "/upload", label: "Create", icon: PlusSquare },
+    { href: "/reels", label: "Reels", icon: Clapperboard },
+    { href: "/search", label: "Search", icon: Search },
+    { href: "/profile", label: "Profile", icon: User },
+  ];
+
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-black border-t border-gray-200 dark:border-zinc-800 z-50 flex justify-around items-center h-14 transition-colors duration-300">
-      <Link href="/" className="p-2"><LayoutDashboard className={getIconClass('/')} /></Link>
-      <Link href="/feed" className="p-2"><Home className={getIconClass('/feed')} /></Link>
-      <Link href="/search" className="p-2"><Search className={getIconClass('/search')} /></Link>
-      <Link href="/reels" className="p-2"><Clapperboard className={getIconClass('/reels')} /></Link>
-      <Link href="/leaderboard" className="p-2"><Trophy className={getIconClass('/leaderboard')} /></Link>
-      <Link href="/profile" className="p-2"><User className={getIconClass('/profile')} /></Link>
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-black border-t border-gray-200 dark:border-zinc-800 z-50 transition-colors duration-300"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <div className="flex justify-around items-center h-14">
+        {items.map(({ href, label, icon: Icon }) => {
+          const active = isActive(href);
+          return (
+            <Link key={href} href={href} aria-label={label} aria-current={active ? "page" : undefined} className="p-2">
+              <Icon className={`w-6 h-6 ${active ? "text-black dark:text-white" : "text-gray-500 dark:text-gray-400"}`} />
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

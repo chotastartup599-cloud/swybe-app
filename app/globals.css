@@ -12,16 +12,99 @@
   --foreground: #ffffff;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Scrollbar: pehle poori site par chhupa diya tha (desktop par scroll ka pata hi nahi chalta tha).
+   Ab patla scrollbar dikhta hai, aur sirf horizontal lists me .no-scrollbar se chhupta hai. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 113, 122, 0.5) transparent;
+}
+
 ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.45);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Modals ke animations (pehle ye classes define hi nahi thi, to animation chalta hi nahi tha) */
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+/* Mobile par layout (main.shell-pad) TopBar aur BottomNav ki jagah khud chhodta hai.
+   Kuch pages ne apni taraf se bhi pt-16 / pb-20 lagaya tha, jisse double gap banta tha.
+   Ye rule use ek jagah se theek karta hai (8 pages dobara badalne ki zarurat nahi). */
+@media (max-width: 767.98px) {
+  main.shell-pad {
+    padding-top: 3.5rem;
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+  }
+
+  main.shell-pad > .pt-16,
+  main.shell-pad > .pt-20 {
+    padding-top: 0.5rem;
+  }
+
+  main.shell-pad > .pb-20 {
+    padding-bottom: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
