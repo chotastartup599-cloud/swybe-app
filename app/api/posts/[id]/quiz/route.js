@@ -5,6 +5,7 @@ import User from '@/models/User';
 import QuizAttempt from '@/models/QuizAttempt';
 import { requireDbUser, authErrorResponse, serverError } from '@/lib/apiAuth';
 import { isObjectId, istDayStartMs } from '@/lib/helpers';
+import { rateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 const QUIZ_XP = 5;
 const DAILY_QUIZ_XP_LIMIT = 10; // din me sirf 10 quizzes se XP milega
@@ -14,6 +15,11 @@ export async function POST(req, { params }) {
   if (auth.error) return authErrorResponse(auth);
 
   try {
+    await connectDB();
+
+    const limit = await rateLimit(`quiz:${auth.uid}`, 30, 60);
+    if (!limit.ok) return rateLimitResponse(limit);
+
     const { id } = await params;
     if (!isObjectId(id)) {
       return NextResponse.json({ success: false, error: 'Invalid post id' }, { status: 400 });

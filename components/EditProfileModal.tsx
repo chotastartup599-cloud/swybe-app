@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { X, Camera, Loader2, AlertCircle } from "lucide-react";
+import { X, Camera, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import { uploadToCloudinary, MAX_IMAGE_MB } from "@/lib/cloudinary";
+import { isAdminEmail } from "@/lib/constants";
 
 export default function EditProfileModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
-  const { dbUser, refreshUser } = useAuth();
+  const { dbUser, refreshUser, logout } = useAuth();
   
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
@@ -17,8 +19,13 @@ export default function EditProfileModal({ isOpen, onClose }: { isOpen: boolean,
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Account delete
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteText, setDeleteText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   // Modal har baar khulne par taaza profile data se shuru hota hai
-  // (pehle purani/edited state reh jaati thi aur wahi photo dobara upload hoti thi)
   useEffect(() => {
     if (!isOpen || !dbUser) return;
     setName(dbUser.name || "");
@@ -28,6 +35,9 @@ export default function EditProfileModal({ isOpen, onClose }: { isOpen: boolean,
     setFile(null);
     setPreview(dbUser.photoURL || "");
     setError(null);
+    setShowDelete(false);
+    setDeleteText("");
+    setDeleteError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
@@ -37,6 +47,8 @@ export default function EditProfileModal({ isOpen, onClose }: { isOpen: boolean,
   }, [preview]);
 
   if (!isOpen || !dbUser) return null;
+
+  const isMainAdmin = isAdminEmail(dbUser.email);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0];
@@ -105,6 +117,30 @@ export default function EditProfileModal({ isOpen, onClose }: { isOpen: boolean,
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (deleteText !== "DELETE" || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Account delete nahi hua. Dobara try karo.");
+
+      try { await logout(); } catch {}
+      // Poora page reload: koi purani state na bache
+      window.location.assign("/");
+    } catch (err: any) {
+      console.error(err);
+      setDeleteError(err?.message || "Account delete nahi hua. Dobara try karo.");
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div 
@@ -156,7 +192,7 @@ export default function EditProfileModal({ isOpen, onClose }: { isOpen: boolean,
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1 block">WhatsApp Number</label>
             <input type="tel" maxLength={16} value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="91XXXXXXXXXX" className="w-full px-4 py-2 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm outline-none dark:text-white" />
-            <p className="text-[11px] text-gray-400 mt-1">Country code ke saath likho (jaise 919876543210), + ke bina.</p>
+            <p className="text-[11px] text-gray-400 mt-1">Country code ke saath likho (jaise 919876543210), + ke bina. Ye aapki public profile par dikhta hai.</p>
           </div>
 
           {error && (
@@ -168,12 +204,73 @@ export default function EditProfileModal({ isOpen, onClose }: { isOpen: boolean,
 
           <button 
             type="submit" 
-            disabled={loading}
+            disabled={loading || deleting}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition mt-2 disabled:opacity-70"
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Save Changes"}
           </button>
         </form>
+
+        {/* Delete account */}
+        <div className="mt-8 pt-6 border-t border-gray-200 dark:border-zinc-800">
+          <h3 className="text-sm font-bold text-red-600 mb-1">Delete account</h3>
+
+          {isMainAdmin ? (
+            <p className="text-xs text-gray-500">Admin account yahan se delete nahi ho sakta.</p>
+          ) : !showDelete ? (
+            <>
+              <p className="text-xs text-gray-500 mb-3">Aapka profile, posts, comments, likes aur saved folders hamesha ke liye hat jayenge. Ye wapas nahi aayega.</p>
+              <button
+                type="button"
+                onClick={() => setShowDelete(true)}
+                className="text-sm font-semibold text-red-600 border border-red-300 dark:border-red-500/40 rounded-xl px-4 py-2 hover:bg-red-50 dark:hover:bg-red-500/10 transition flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" /> Delete my account
+              </button>
+            </>
+          ) : (
+            <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl p-4">
+              <p className="text-sm text-red-700 dark:text-red-300 font-medium mb-3">
+                Confirm karne ke liye neeche <span className="font-extrabold">DELETE</span> likho.
+              </p>
+              <input
+                type="text"
+                value={deleteText}
+                onChange={(e) => setDeleteText(e.target.value)}
+                placeholder="DELETE"
+                autoCapitalize="characters"
+                className="w-full px-4 py-2 bg-white dark:bg-zinc-800 border border-red-200 dark:border-red-500/30 rounded-xl text-sm outline-none dark:text-white mb-3"
+              />
+              {deleteError && <p className="text-xs text-red-600 font-medium mb-3">{deleteError}</p>}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setShowDelete(false); setDeleteText(""); setDeleteError(null); }}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-sm font-semibold dark:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={deleteText !== "DELETE" || deleting}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete forever"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Legal links */}
+        <div className="mt-6 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[11px] text-gray-400">
+          <Link href="/privacy" target="_blank" className="hover:underline">Privacy Policy</Link>
+          <Link href="/terms" target="_blank" className="hover:underline">Terms</Link>
+          <Link href="/guidelines" target="_blank" className="hover:underline">Guidelines</Link>
+        </div>
+        <p className="text-[11px] text-gray-400 text-center mt-1">Swybe is created by Chota Startup</p>
       </div>
     </div>
   );

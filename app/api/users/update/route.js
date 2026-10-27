@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/models/User';
 import { requireAuth, authErrorResponse, serverError, cleanText, cleanList } from '@/lib/apiAuth';
+import { rateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(req) {
   const auth = await requireAuth(req);
@@ -9,6 +10,10 @@ export async function POST(req) {
 
   try {
     await connectDB();
+
+    const limit = await rateLimit(`onboard:${auth.uid}`, 20, 3600);
+    if (!limit.ok) return rateLimitResponse(limit);
+
     const body = await req.json().catch(() => ({}));
     const role = body.role;
 

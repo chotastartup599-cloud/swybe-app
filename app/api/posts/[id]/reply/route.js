@@ -3,6 +3,7 @@ import Post from '@/models/Post';
 import User from '@/models/User';
 import { requireDbUser, authErrorResponse, serverError, cleanText } from '@/lib/apiAuth';
 import { isObjectId } from '@/lib/helpers';
+import { rateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(req, { params }) {
   // Reply ke liye real account chahiye (guest nahi)
@@ -10,6 +11,9 @@ export async function POST(req, { params }) {
   if (auth.error) return authErrorResponse(auth);
 
   try {
+    const limit = await rateLimit(`reply:${auth.uid}`, 20, 3600);
+    if (!limit.ok) return rateLimitResponse(limit, 'Aapne bahut saare replies bhej diye. Thodi der baad try karo.');
+
     const { id } = await params;
     if (!isObjectId(id)) {
       return NextResponse.json({ success: false, error: 'Invalid story id' }, { status: 400 });

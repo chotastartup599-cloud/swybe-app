@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/models/User';
 import { requireAuth, authErrorResponse, serverError } from '@/lib/apiAuth';
+import { rateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 const MAX_FOLLOWING = 1000;
 
@@ -12,6 +13,10 @@ export async function POST(req) {
 
   try {
     await connectDB();
+
+    const limit = await rateLimit(`follow:${auth.uid}`, 30, 60);
+    if (!limit.ok) return rateLimitResponse(limit);
+
     const { targetUserId, action } = await req.json().catch(() => ({}));
 
     if (action !== 'follow' && action !== 'unfollow') {

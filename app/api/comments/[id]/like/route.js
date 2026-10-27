@@ -4,6 +4,7 @@ import Comment from '@/models/Comment';
 import CommentLike from '@/models/CommentLike';
 import { requireAuth, authErrorResponse, serverError } from '@/lib/apiAuth';
 import { isObjectId } from '@/lib/helpers';
+import { rateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(req, { params }) {
   const auth = await requireAuth(req);
@@ -11,6 +12,10 @@ export async function POST(req, { params }) {
 
   try {
     await connectDB();
+
+    const limit = await rateLimit(`clike:${auth.uid}`, 60, 60);
+    if (!limit.ok) return rateLimitResponse(limit);
+
     const { id } = await params;
     if (!isObjectId(id)) {
       return NextResponse.json({ success: false, error: 'Invalid comment id' }, { status: 400 });

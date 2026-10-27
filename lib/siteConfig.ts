@@ -9,5 +9,5 @@ export const SITE = {
   // TODO: jab dedicated support email ban jaye (jaise support@ctup.in), to sirf yahan badal dena
   contactEmail: "chotastartup599@gmail.com",
   grievanceOfficer: "Grievance Officer, Chota Startup",
-  legalUpdated: "26 October 2026",
+  legalUpdated: "27 October 2026",
 };

@@ -3,14 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-
-   serverExternalPackages: ["firebase-admin"],
-  typescript: {
-    // Abhi build tootne se bachane ke liye errors ignore hote hain (jaise pehle).
-    // Asli errors dekhne ke liye STRICT_BUILD=true ke saath build chalao (neeche notes me tarika hai).
-    ignoreBuildErrors: process.env.STRICT_BUILD !== "true",
-  },
-
+ serverExternalPackages: ["firebase-admin"],
   async headers() {
     return [
       {

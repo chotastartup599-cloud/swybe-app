@@ -47,6 +47,7 @@ export default function PrivacyPage() {
         />
         <P><strong>Content you create.</strong> Posts, reels, stories, quizzes, comments, replies, saved folders and the photos or videos you upload.</P>
         <P><strong>Activity inside Swybe.</strong> Likes, follows, quiz answers and results, XP, streaks, badges, the time you spend watching content by subject, post and profile views, notifications, and the time you were last active.</P>
+        <P><strong>Reports and safety.</strong> If you report a post, comment or profile, we store your report (what you reported, the reason you chose, any note you wrote and your account) so our team can review it. We also keep a record of the action we take.</P>
         <P><strong>Technical information.</strong> Our hosting and security providers may log your IP address, device and browser type and basic request details to keep Swybe running and secure. We use browser storage (such as local storage) to keep you signed in and remember your theme. We do not use advertising cookies.</P>
         <P>We do not collect your precise location, government ID numbers or financial information.</P>
       </Section>
@@ -58,8 +59,8 @@ export default function PrivacyPage() {
             "To personalise what you see using the class, exams and subjects you chose.",
             "To calculate XP, streaks, badges and the leaderboard, and to keep them fair.",
             "To review educator applications and let approved educators publish content.",
-            "To keep Swybe safe: preventing spam, cheating and abuse, and enforcing our Terms and Community Guidelines.",
-            "To understand how Swybe is used so we can fix problems and improve it.",
+            "To keep Swybe safe: preventing spam, cheating and abuse, reviewing reports, and enforcing our Terms and Community Guidelines.",
+            "To understand how Swybe is used (for example, how many people visit and how fast pages load) so we can fix problems and improve it.",
             "To comply with the law and respond to valid legal requests.",
           ]}
         />
@@ -71,7 +72,7 @@ export default function PrivacyPage() {
           items={[
             "Public: your name, profile photo, bio, optional Instagram handle and WhatsApp number, follower and following counts, and the posts, reels, stories and comments you publish.",
             "Public on the leaderboard: your name, photo, XP, streak and badges, if you are a learner with a completed profile and some XP.",
-            "Private: your email address, notifications, saved folders, quiz answers and watch history are not shown to other users.",
+            "Private: your email address, notifications, saved folders, quiz answers and watch history are not shown to other users. Reports you send are not shown to the person you reported.",
           ]}
         />
         <P>Anything you post publicly can be seen by other users. Please do not share sensitive personal details such as your home address, school ID or phone number in posts, comments or your bio.</P>
@@ -84,7 +85,7 @@ export default function PrivacyPage() {
             "Google Firebase: sign-in and authentication.",
             "MongoDB Atlas: database where your account and activity data is stored.",
             "Cloudinary: storage and delivery of photos and videos you upload.",
-            "Vercel: hosting of the Swybe website and servers, and basic performance information.",
+            "Vercel: hosting of the Swybe website and servers, and privacy-friendly website analytics (page visits and performance, without advertising cookies).",
           ]}
         />
         <P>These providers may process data on servers located outside India. We may also disclose information if the law requires it, to protect the safety of our users, or in connection with a business change such as a merger or transfer of Swybe. We do not sell or rent your personal information.</P>
@@ -103,19 +104,22 @@ export default function PrivacyPage() {
       </Section>
 
       <Section id="retention" title="7. How long we keep information and how to delete it">
-        <P>We keep your information while your account is active. You can delete your account from your profile settings in Swybe, or by emailing us. When an account is deleted, we remove the profile and the content and activity linked to it, such as posts, comments, likes, saved folders and follows.</P>
-        <P>Some copies may remain for a limited time in backups and logs, and we may keep limited information where the law requires it or where it is needed to deal with abuse or disputes.</P>
+        <P>We keep your information while your account is active.</P>
+        <P>
+          <strong>You can delete your account yourself:</strong> open your Profile, tap Edit Profile and choose Delete account. You can also email us and ask us to do it. When an account is deleted, we remove the profile and the content and activity linked to it, such as posts, comments, likes, saved folders and follows, and the reports you sent. We also ask our media provider to delete the photos and videos you uploaded, including your profile photo.
+        </P>
+        <P>Some copies may remain for a limited time in backups and logs. We may keep limited records, such as reports and moderation actions about content, for as long as needed for safety, to deal with abuse or disputes, or where the law requires it.</P>
       </Section>
 
       <Section id="security" title="8. Security">
-        <P>We use industry-standard measures such as encrypted connections (HTTPS), token-based sign-in and access checks on our servers. No online service can be completely secure, so please keep your password safe and tell us at once if you think your account has been misused.</P>
+        <P>We use industry-standard measures such as encrypted connections (HTTPS), token-based sign-in, access checks and rate limits on our servers. No online service can be completely secure, so please keep your password safe and tell us at once if you think your account has been misused.</P>
       </Section>
 
       <Section id="rights" title="9. Your choices and rights">
         <Ul
           items={[
             "Access and correct: you can view and edit most of your information from your profile.",
-            "Delete: you can delete your account, or ask us to do it.",
+            "Delete: you can delete your account yourself from Edit Profile, or ask us to do it.",
             "Withdraw consent: you can stop using Swybe at any time. You can also remove optional details such as your Instagram handle and WhatsApp number.",
             "Questions or complaints: contact us using the details below. We will reply within a reasonable time.",
           ]}

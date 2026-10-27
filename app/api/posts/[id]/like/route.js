@@ -1,16 +1,19 @@
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/db';
 import Post from '@/models/Post';
 import Like from '@/models/Like';
 import User from '@/models/User';
 import { requireDbUser, authErrorResponse, serverError } from '@/lib/apiAuth';
 import { isObjectId } from '@/lib/helpers';
+import { rateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 export async function POST(req, { params }) {
   const auth = await requireDbUser(req);
   if (auth.error) return authErrorResponse(auth);
 
   try {
+    const limit = await rateLimit(`like:${auth.uid}`, 60, 60);
+    if (!limit.ok) return rateLimitResponse(limit);
+
     const { id } = await params;
     if (!isObjectId(id)) {
       return NextResponse.json({ success: false, error: 'Invalid post id' }, { status: 400 });

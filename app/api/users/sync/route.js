@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/models/User';
 import { requireAuth, authErrorResponse, serverError, cleanText } from '@/lib/apiAuth';
+import { rateLimit, rateLimitResponse } from '@/lib/rateLimit';
 
 const PLACEHOLDER_NAMES = ["Guest User", "Student"];
 
@@ -11,6 +12,11 @@ export async function POST(req) {
 
   try {
     await connectDB();
+
+    // Page reload par ye ek baar chalta hai, isliye limit kaafi ooncha rakha hai
+    const limit = await rateLimit(`sync:${auth.uid}`, 60, 60);
+    if (!limit.ok) return rateLimitResponse(limit);
+
     const body = await req.json().catch(() => ({}));
 
     // UID, email, photo SIRF verified token se, body par bharosa nahi
@@ -57,7 +63,9 @@ export async function POST(req) {
       }
     } else {
       const changes = {};
-      if (photoURL && user.photoURL !== photoURL) changes.photoURL = photoURL;
+      // Photo: sirf tab Google ki photo se badlo jab abhi photo hi nahi hai
+      // (warna user ki apni upload ki hui photo har login par Google ki photo se overwrite ho jaati thi)
+      if (photoURL && !user.photoURL) changes.photoURL = photoURL;
       // Signup ke time pehle sync me naam nahi hota, baad me asli naam aa jaata hai
       if (realName && PLACEHOLDER_NAMES.includes(user.name)) changes.name = realName;
       if (Object.keys(changes).length > 0) {
