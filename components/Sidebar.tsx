@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Home, Search, MessageSquare, Clapperboard, PlusSquare, User, Sun, Moon, Shield, LogOut, LogIn, Trophy } from "lucide-react";
+import { LayoutDashboard, Home, Search, MessageSquare, Clapperboard, PlusSquare, User, Sun, Moon, Shield, LogOut, LogIn, Trophy, HelpCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -79,6 +79,22 @@ export default function Sidebar() {
           {isDark ? <Sun className="w-5 h-5 shrink-0 text-gray-600 dark:text-gray-400" /> : <Moon className="w-5 h-5 shrink-0 text-gray-600 dark:text-gray-400" />}
           <span className={labelClass}>Theme</span>
         </button>
+
+        {/* 🟢 NAYA: Help & Legal Section Start */}
+        <div className="relative group/help">
+          <button aria-label="Help & Legal" className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-900/50 transition-colors w-full">
+            <HelpCircle className="w-5 h-5 shrink-0 text-gray-600 dark:text-gray-400 transition-transform group-hover:scale-105" />
+            <span className={labelClass}>Help & Legal</span>
+          </button>
+          
+          {/* Hover Dropdown Menu */}
+          <div className="absolute left-[60px] bottom-0 mb-2 w-48 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-gray-100 dark:border-zinc-800 overflow-hidden z-50 opacity-0 invisible group-hover/help:opacity-100 group-hover/help:visible transition-all duration-200">
+            <Link href="/privacy" className="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition">Privacy Policy</Link>
+            <Link href="/terms" className="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition">Terms of Use</Link>
+            <Link href="/guidelines" className="block px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition">Community Guidelines</Link>
+          </div>
+        </div>
+        {/* 🟢 NAYA: Help & Legal Section End */}
 
         {dbUser && <NotificationBell variant="sidebar" />}
 

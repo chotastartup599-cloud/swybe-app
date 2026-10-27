@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import EditProfileModal from "@/components/EditProfileModal";
 import ProfileGrid from "@/components/ProfileGrid";
 import PostTile from "@/components/PostTile";
-
+import Link from "next/link";
 export default function ProfilePage() {
   const { dbUser, loading } = useAuth();
   const router = useRouter();
@@ -219,7 +219,20 @@ export default function ProfilePage() {
 
       </div>
 
+           {/* ... purana code ... */}
+      
       <EditProfileModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} />
+
+      {/* 🟢 NAYA: Legal Links Footer */}
+      <div className="mt-16 mb-8 text-center text-xs text-gray-500 dark:text-gray-400">
+        <p className="mb-2">© {new Date().getFullYear()} Swybe by Chota Startup. All rights reserved.</p>
+        <div className="flex flex-wrap justify-center gap-4">
+          <Link href="/privacy" className="hover:text-black dark:hover:text-white hover:underline transition">Privacy Policy</Link>
+          <Link href="/terms" className="hover:text-black dark:hover:text-white hover:underline transition">Terms of Use</Link>
+          <Link href="/guidelines" className="hover:text-black dark:hover:text-white hover:underline transition">Community Guidelines</Link>
+        </div>
+      </div>
+
     </div>
   );
 }
