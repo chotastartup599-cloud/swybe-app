@@ -4,12 +4,50 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/context/AuthContext";
 import AppShell from "@/components/AppShell";
+import { SITE } from "@/lib/siteConfig";
 
 const inter = Inter({ subsets: ["latin"] });
 
+const defaultTitle = `${SITE.name} - ${SITE.tagline}`;
+
 export const metadata: Metadata = {
-  title: "Swybe - Learn from Toppers & Peers",
-  description: "A unique educational platform for students.",
+  metadataBase: new URL(SITE.url),
+  title: {
+    default: defaultTitle,
+    template: `%s | ${SITE.name}`,
+  },
+  description: SITE.description,
+  applicationName: SITE.name,
+  authors: [{ name: SITE.company }],
+  creator: SITE.company,
+  publisher: SITE.company,
+  keywords: [
+    "Swybe",
+    "Chota Startup",
+    "study app",
+    "Class 9 to 12",
+    "JEE preparation",
+    "NEET preparation",
+    "NDA preparation",
+    "UPSC preparation",
+    "educational reels",
+    "quiz and XP",
+    "student community",
+  ],
+  openGraph: {
+    type: "website",
+    siteName: SITE.name,
+    locale: "en_IN",
+    title: defaultTitle,
+    description: SITE.description,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: defaultTitle,
+    description: SITE.description,
+  },
+  formatDetection: { telephone: false },
+  appleWebApp: { capable: true, title: SITE.name, statusBarStyle: "default" },
 };
 
 // viewportFit "cover": iPhone ke notch/home-bar ke hisaab se BottomNav sahi baithta hai

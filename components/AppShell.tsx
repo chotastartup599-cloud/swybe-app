@@ -7,8 +7,9 @@ import TopBar from "@/components/TopBar";
 import BottomNav from "@/components/BottomNav";
 import { useAuth } from "@/context/AuthContext";
 
-// In pages par Sidebar / TopBar / BottomNav nahi dikhte (login aur setup ke screen)
-const BARE_PREFIXES = ["/auth", "/onboarding"];
+// In pages par app ka menu (Sidebar / TopBar / BottomNav) nahi dikhta:
+// login, setup ke screens, aur public pages (inka apna header/footer hai)
+const BARE_PREFIXES = ["/auth", "/onboarding", "/privacy", "/terms", "/guidelines"];
 const FOCUS_REFRESH_MS = 60_000;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -33,7 +34,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [hasUser]);
 
-  const isBare = BARE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  // "/" par logged-out (ya abhi check ho raha) user ko landing page dikhta hai, uska apna header hai
+  const isHomeLanding = pathname === "/" && !dbUser;
+
+  const isBare =
+    isHomeLanding || BARE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   if (isBare) return <>{children}</>;
 
   // Reels page apni padding khud sambhalta hai (full-screen video)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { GraduationCap, UserCheck, Mail, Lock, User, Loader2, Eye, EyeOff, AlertCircle, CheckCircle2, Copy } from "lucide-react";
@@ -173,7 +174,7 @@ export default function AuthPage() {
       <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-2xl border border-gray-100 dark:border-zinc-800">
         
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-black dark:text-white tracking-tight">Swybe</h1>
+          <Link href="/" className="text-3xl font-extrabold text-black dark:text-white tracking-tight">Swybe</Link>
           <p className="text-sm text-gray-500 mt-2">
             {resetMode ? "Apna email daalo, hum reset link bhejenge." : isLogin ? "Welcome back! Log in to continue." : "Create your account to start learning."}
           </p>
@@ -360,6 +361,14 @@ export default function AuthPage() {
             </p>
           </>
         )}
+
+        <p className="text-[11px] text-gray-400 text-center mt-6 leading-relaxed">
+          By continuing, you agree to our{" "}
+          <Link href="/terms" target="_blank" className="underline hover:text-gray-600 dark:hover:text-gray-300">Terms of Use</Link>{" "}and{" "}
+          <Link href="/privacy" target="_blank" className="underline hover:text-gray-600 dark:hover:text-gray-300">Privacy Policy</Link>.
+          If you are under 18, please use Swybe with a parent or guardian&apos;s permission.
+        </p>
+        <p className="text-[11px] text-gray-400 text-center mt-2">Created by Chota Startup</p>
 
       </div>
     </div>
