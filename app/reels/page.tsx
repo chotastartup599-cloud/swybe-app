@@ -9,6 +9,7 @@ import { Heart, MessageCircle, Send, Bookmark, Volume2, VolumeX, Play } from "lu
 import CommentModal from "@/components/CommentModal";
 import SaveModal from "@/components/SaveModal";
 import FollowButton from "@/components/FollowButton";
+import PostMenu from "@/components/PostMenu";
 import { useAuth } from "@/context/AuthContext";
 import { getMediaList, playableVideoUrl } from "@/lib/media";
 import { useWatchTracker } from "@/lib/useWatchTracker";
@@ -35,8 +36,8 @@ interface Reel {
 // Ek reel ki poori slide. Video sirf active (aur uske aas-paas ki) slide par load hota hai,
 // aur sirf active slide chalti hai (pehle saari reels ek saath chalti thi, awaaz bhi).
 function ReelSlide({
-  reel, isActive, isNear, muted, onToggleMute, paused, canTrack, isMine,
-  onLike, onComment, onShare, onSave,
+  reel, isActive, isNear, muted, onToggleMute, paused, canTrack, isMine, signedIn,
+  onLike, onComment, onShare, onSave, onDeleted,
 }: {
   reel: Reel;
   isActive: boolean;
@@ -46,10 +47,12 @@ function ReelSlide({
   paused: boolean;
   canTrack: boolean;
   isMine: boolean;
+  signedIn: boolean;
   onLike: () => void;
   onComment: () => void;
   onShare: () => void;
   onSave: () => void;
+  onDeleted: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [userPaused, setUserPaused] = useState(false);
@@ -155,6 +158,10 @@ function ReelSlide({
           <Bookmark size={28} className={reel.isSaved ? "fill-yellow-400 text-yellow-400" : "group-hover:text-yellow-400 transition"} />
           <span className="text-xs font-semibold">Save</span>
         </button>
+
+        {signedIn && (
+          <PostMenu postId={reel._id} isOwner={isMine} variant="dark" label="reel" onDeleted={onDeleted} />
+        )}
       </div>
     </div>
   );
@@ -288,6 +295,12 @@ function ReelsContent() {
     }
   };
 
+  // Reel delete ho gayi: list se hatao aur active index sahi rakho
+  const handleReelDeleted = (id: string) => {
+    setReels((prev) => prev.filter((r) => r._id !== id));
+    setActiveIndex((i) => Math.max(0, Math.min(i, reels.length - 2)));
+  };
+
   if (loading || authLoading) return <div className="w-full h-[80vh] bg-black flex items-center justify-center text-white">Loading Reels...</div>;
 
   if (reels.length === 0) {
@@ -300,6 +313,7 @@ function ReelsContent() {
   }
 
   const paused = !!activeCommentPostId || !!activeSavePostId || pageHidden;
+  const commentReel = reels.find((r) => r._id === activeCommentPostId);
 
   return (
     <div className="w-full min-h-screen bg-black flex justify-center pt-16 pb-16">
@@ -322,11 +336,13 @@ function ReelsContent() {
                 onToggleMute={() => setIsMuted((m) => !m)}
                 paused={paused}
                 canTrack={!!dbUser}
+                signedIn={!!dbUser}
                 isMine={!!dbUser && !!reel.creatorUid && dbUser.firebaseUid === reel.creatorUid}
                 onLike={() => handleLike(reel._id, reel.likes, !!reel.isLiked)}
                 onComment={() => setActiveCommentPostId(reel._id)}
                 onShare={() => handleShare(reel)}
                 onSave={() => setActiveSavePostId(reel._id)}
+                onDeleted={() => handleReelDeleted(reel._id)}
               />
             </SwiperSlide>
           ))}
@@ -335,10 +351,14 @@ function ReelsContent() {
 
       <CommentModal
         postId={activeCommentPostId || ""}
+        postOwnerUid={commentReel?.creatorUid || undefined}
         isOpen={!!activeCommentPostId}
         onClose={() => setActiveCommentPostId(null)}
         onCommentAdded={() => {
           setReels((prev) => prev.map((r) => r._id === activeCommentPostId ? { ...r, comments: r.comments + 1 } : r));
+        }}
+        onCommentsRemoved={(count) => {
+          setReels((prev) => prev.map((r) => r._id === activeCommentPostId ? { ...r, comments: Math.max(0, r.comments - count) } : r));
         }}
       />
       <SaveModal

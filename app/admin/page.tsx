@@ -6,10 +6,10 @@ import { useAuth } from "@/context/AuthContext";
 import { isAdminEmail } from "@/lib/constants";
 import {
   ShieldAlert, CheckCircle, XCircle, Loader2, Settings, LayoutDashboard,
-  Users, FileText, Box, Trash2, Plus, Eye, EyeOff, Search,
+  Users, FileText, Box, Trash2, Plus, Eye, EyeOff, Search, Flag,
 } from "lucide-react";
 
-type Tab = "overview" | "creators" | "users" | "settings" | "blocks" | "content";
+type Tab = "overview" | "creators" | "reports" | "users" | "settings" | "blocks" | "content";
 
 const PAGE_SIZE = 20;
 const POST_TYPES = ["", "feed", "reel", "story", "quiz"];
@@ -23,11 +23,22 @@ const SETTING_KEYS = [
 const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "creators", label: "Approvals", icon: Users },
+  { id: "reports", label: "Reports", icon: Flag },
   { id: "users", label: "All Users", icon: Users },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "blocks", label: "Blocks", icon: Box },
   { id: "content", label: "Content", icon: FileText },
 ];
+const REASON_LABELS: Record<string, string> = {
+  spam: "Spam / scam",
+  harassment: "Harassment",
+  hate: "Hate",
+  inappropriate: "Sexual / unsafe",
+  unsafe: "Self-harm / dangerous",
+  misinformation: "Misinformation",
+  copyright: "Copyright",
+  other: "Other",
+};
 
 // Token apne aap lag jaata hai (lib/authFetch). Error aaye to message throw hota hai.
 async function api(url: string, options?: RequestInit) {
@@ -106,6 +117,53 @@ export default function AdminDashboard() {
       setCreators((prev) => (prev || []).filter((c) => c.firebaseUid !== uid));
       setStats(null); // overview ke numbers dobara aayenge
       showNotice("success", status === "approved" ? "Educator approve ho gaya." : "Application reject ho gayi.");
+    } catch (err: any) {
+      showNotice("error", err.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // ---------- Reports ----------
+  const [reports, setReports] = useState<any[]>([]);
+  const [reportsTotal, setReportsTotal] = useState(0);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsOpenCount, setReportsOpenCount] = useState<number | null>(null);
+  const [reportStatus, setReportStatus] = useState("open");
+  const reportsReq = useRef(0);
+
+  const loadReports = useCallback(async (reset: boolean, skip = 0) => {
+    const reqId = ++reportsReq.current;
+    setReportsLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), skip: String(skip), status: reportStatus });
+      const data = await api(`/api/admin/reports?${params.toString()}`);
+      if (reqId !== reportsReq.current) return;
+      setReports((prev) => (reset ? data.data : [...prev, ...data.data]));
+      setReportsTotal(data.total);
+      setReportsOpenCount(data.openCount);
+    } catch (err: any) {
+      if (reqId === reportsReq.current) showNotice("error", err.message);
+    } finally {
+      if (reqId === reportsReq.current) setReportsLoading(false);
+    }
+  }, [reportStatus, showNotice]);
+
+  const handleReportAction = async (report: any, action: "dismiss" | "resolve" | "delete_content") => {
+    if (busyId) return;
+    if (action === "delete_content") {
+      const what = report.targetType === "post" ? "post" : "comment";
+      if (!confirm(`Ye ${what} hamesha ke liye delete karna hai? Uske owner ko batayenge ki Community Guidelines ki wajah se hataya gaya.`)) return;
+    }
+    setBusyId(report._id);
+    try {
+      await api("/api/admin/reports", { method: "PATCH", body: JSON.stringify({ id: report._id, action }) });
+      showNotice(
+        "success",
+        action === "dismiss" ? "Report dismiss ho gayi." : action === "resolve" ? "Report resolved mark ho gayi." : "Content delete ho gaya."
+      );
+      setStats(null);
+      await loadReports(true);
     } catch (err: any) {
       showNotice("error", err.message);
     } finally {
@@ -337,6 +395,11 @@ export default function AdminDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, activeTab, debouncedPostQuery, postTypeFilter]);
 
+  useEffect(() => {
+    if (isAdmin && activeTab === "reports") loadReports(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, activeTab, reportStatus]);
+
   if (loading || !dbUser) {
     return <div className="h-screen flex items-center justify-center dark:text-white"><Loader2 className="w-8 h-8 animate-spin" /></div>;
   }
@@ -351,12 +414,15 @@ export default function AdminDashboard() {
     );
   }
 
+  const openReportsBadge = reportsOpenCount !== null ? reportsOpenCount : (stats?.openReports ?? 0);
+
   const statCards = stats
     ? [
         { label: "Total Users", value: stats.users, color: "text-green-500" },
         { label: "Learners", value: stats.learners },
         { label: "Approved Educators", value: stats.approvedMasters },
         { label: "Pending Applications", value: stats.pendingMasters, color: "text-pink-500" },
+        { label: "Open Reports", value: stats.openReports, color: "text-red-500" },
         { label: "Guest Accounts", value: stats.guests },
         { label: "Active Today", value: stats.activeToday, color: "text-blue-500" },
         { label: "Active (7 days)", value: stats.active7d },
@@ -387,6 +453,9 @@ export default function AdminDashboard() {
               <Icon className="w-5 h-5" /> {tab.label}
               {tab.id === "creators" && stats?.pendingMasters > 0 && (
                 <span className="ml-1 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{stats.pendingMasters}</span>
+              )}
+              {tab.id === "reports" && openReportsBadge > 0 && (
+                <span className="ml-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{openReportsBadge}</span>
               )}
             </button>
           );
@@ -450,6 +519,84 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---------- REPORTS ---------- */}
+        {activeTab === "reports" && (
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-2xl font-bold dark:text-white mb-1">Reports</h1>
+            <p className="text-sm text-gray-500 mb-4">{reportsTotal} reports</p>
+
+            <div className="flex gap-3 mb-4">
+              <select value={reportStatus} onChange={(e) => setReportStatus(e.target.value)} className={inputClass}>
+                <option value="open">Open</option>
+                <option value="resolved">Resolved</option>
+                <option value="dismissed">Dismissed</option>
+                <option value="all">All</option>
+              </select>
+            </div>
+
+            {reportsLoading && reports.length === 0 ? <Spinner /> : reports.length === 0 ? (
+              <p className="text-gray-500">{reportStatus === "open" ? "Koi open report nahi hai. Sab theek chal raha hai! 🎉" : "Koi report nahi mili."}</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {reports.map((report) => {
+                  const isOpen = report.status === "open";
+                  const busy = busyId === report._id;
+                  const typeLabel = report.snapshot?.kind && report.snapshot.kind !== report.targetType
+                    ? `${report.targetType} (${report.snapshot.kind})`
+                    : report.targetType;
+
+                  return (
+                    <div key={report._id} className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-gray-200 dark:border-zinc-800">
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold uppercase">{REASON_LABELS[report.reason] || report.reason}</span>
+                        <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold uppercase">{typeLabel}</span>
+                        {isOpen && report.openReportsOnTarget > 1 && (
+                          <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold">{report.openReportsOnTarget} reports on this</span>
+                        )}
+                        {!isOpen && (
+                          <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${report.status === "resolved" ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-700"}`}>{report.status}</span>
+                        )}
+                        {!report.targetExists && <span className="bg-gray-200 text-gray-600 px-2 py-1 rounded text-xs font-bold">Already removed</span>}
+                      </div>
+
+                      {report.snapshot?.title && <p className="font-bold dark:text-white">{report.snapshot.title}</p>}
+                      {report.snapshot?.text && <p className="text-sm text-gray-700 dark:text-gray-300 mt-1 whitespace-pre-wrap break-words">{report.snapshot.text}</p>}
+                      <p className="text-xs text-gray-500 mt-2">By: {report.snapshot?.ownerName || "Unknown"}</p>
+
+                      <div className="mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800 text-xs text-gray-500">
+                        Reported by {report.reporterName || "a user"} on {fmtDate(report.createdAt)}
+                        {report.details && <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">&quot;{report.details}&quot;</p>}
+                        {!isOpen && report.resolution && <p className="mt-1">Resolution: {report.resolution}</p>}
+                      </div>
+
+                      {isOpen && (
+                        <div className="flex flex-wrap gap-2 mt-4">
+                          {report.targetType !== "user" && report.targetExists && (
+                            <button disabled={busy} onClick={() => handleReportAction(report, "delete_content")} className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 disabled:opacity-50"><Trash2 className="w-4 h-4" /> Delete content</button>
+                          )}
+                          {report.targetType === "user" && report.targetExists && (
+                            <button onClick={() => { setUserQuery(report.snapshot?.ownerName || ""); setRoleFilter(""); setActiveTab("users"); }} className="bg-gray-800 dark:bg-zinc-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">Open in Users tab</button>
+                          )}
+                          <button disabled={busy} onClick={() => handleReportAction(report, "resolve")} className="bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 disabled:opacity-50"><CheckCircle className="w-4 h-4" /> Mark resolved</button>
+                          <button disabled={busy} onClick={() => handleReportAction(report, "dismiss")} className="bg-gray-200 dark:bg-zinc-800 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50">Dismiss</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {reportsLoading && reports.length > 0 && <Spinner />}
+
+            {reports.length < reportsTotal && !reportsLoading && (
+              <div className="flex justify-center mt-4">
+                <button onClick={() => loadReports(false, reports.length)} className="px-6 py-2 rounded-xl bg-gray-200 dark:bg-zinc-800 text-sm font-semibold dark:text-white hover:bg-gray-300 dark:hover:bg-zinc-700 transition">Load more</button>
               </div>
             )}
           </div>

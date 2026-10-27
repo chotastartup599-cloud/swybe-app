@@ -3,6 +3,7 @@ import connectDB from '@/lib/db';
 import User from '@/models/User';
 import Post from '@/models/Post';
 import Comment from '@/models/Comment';
+import Report from '@/models/Report';
 import { requireAdmin, authErrorResponse, serverError } from '@/lib/apiAuth';
 import { istDayStartMs } from '@/lib/helpers';
 
@@ -23,7 +24,7 @@ export async function GET(req) {
     const [
       users, learners, approvedMasters, pendingMasters, guests,
       activeToday, active7d, newUsers7d,
-      posts, reels, liveStories, comments,
+      posts, reels, liveStories, comments, openReports,
     ] = await Promise.all([
       User.countDocuments({}),
       User.countDocuments({ role: 'learner' }),
@@ -37,6 +38,7 @@ export async function GET(req) {
       Post.countDocuments({ type: 'reel' }),
       Post.countDocuments({ type: 'story', $or: [{ expiresAt: { $gt: new Date() } }, { expiresAt: null }] }),
       Comment.countDocuments({}),
+      Report.countDocuments({ status: 'open' }),
     ]);
 
     return NextResponse.json(
@@ -45,7 +47,7 @@ export async function GET(req) {
         data: {
           users, learners, approvedMasters, pendingMasters, guests,
           activeToday, active7d, newUsers7d,
-          posts, reels, liveStories, comments,
+          posts, reels, liveStories, comments, openReports,
         },
       },
       { status: 200 }

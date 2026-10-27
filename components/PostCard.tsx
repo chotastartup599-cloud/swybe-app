@@ -6,6 +6,7 @@ import { Heart, MessageCircle, Send, Bookmark, ChevronLeft, ChevronRight, CheckC
 import CommentModal from "./CommentModal";
 import SaveModal from "./SaveModal";
 import FollowButton from "./FollowButton";
+import PostMenu from "./PostMenu";
 import { useAuth } from "@/context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { getMediaList, isVideoUrl, playableVideoUrl } from "@/lib/media";
@@ -28,6 +29,7 @@ export default function PostCard({ post }: { post: any }) {
   const { dbUser, refreshUser } = useAuth();
   const [isCommentOpen, setIsCommentOpen] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [deleted, setDeleted] = useState(false);
   
   const [likesCount, setLikesCount] = useState<number>(post.likes || 0);
   const [commentsCount, setCommentsCount] = useState<number>(post.comments || 0); 
@@ -164,6 +166,9 @@ export default function PostCard({ post }: { post: any }) {
     </div>
   );
 
+  // Post delete ho gayi: card gayab
+  if (deleted) return null;
+
   return (
     <>
       <div ref={cardRef} id={`post-${post._id}`} className="bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800 pb-4 mb-2 w-full">
@@ -185,9 +190,14 @@ export default function PostCard({ post }: { post: any }) {
             </div>
           </div>
 
-          {post.creatorUid && !isOwnPost && post.type !== "story" && (
-            <FollowButton targetUserId={post.creatorUid} variant="card" />
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {post.creatorUid && !isOwnPost && post.type !== "story" && (
+              <FollowButton targetUserId={post.creatorUid} variant="card" />
+            )}
+            {dbUser && (
+              <PostMenu postId={post._id} isOwner={isOwnPost} label={post.type} onDeleted={() => setDeleted(true)} />
+            )}
+          </div>
         </div>
 
         {post.isTextPost ? (
@@ -276,7 +286,14 @@ export default function PostCard({ post }: { post: any }) {
         </div>
       </div>
 
-      <CommentModal postId={post._id} isOpen={isCommentOpen} onClose={() => setIsCommentOpen(false)} onCommentAdded={() => setCommentsCount((prev: number) => prev + 1)} />
+      <CommentModal
+        postId={post._id}
+        postOwnerUid={post.creatorUid || undefined}
+        isOpen={isCommentOpen}
+        onClose={() => setIsCommentOpen(false)}
+        onCommentAdded={() => setCommentsCount((prev: number) => prev + 1)}
+        onCommentsRemoved={(count: number) => setCommentsCount((prev: number) => Math.max(0, prev - count))}
+      />
       <SaveModal postId={post._id} isOpen={isSaveModalOpen} onClose={() => setIsSaveModalOpen(false)} onSavedChange={setSaved} />
     </>
   );

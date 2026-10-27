@@ -3,8 +3,23 @@
 import { useState, useEffect, useRef } from "react";
 import { X, Smile, Heart } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import ReportModal from "@/components/ReportModal";
 
-export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }: { postId: string, isOpen: boolean, onClose: () => void, onCommentAdded?: () => void }) {
+export default function CommentModal({
+  postId,
+  postOwnerUid,
+  isOpen,
+  onClose,
+  onCommentAdded,
+  onCommentsRemoved,
+}: {
+  postId: string;
+  postOwnerUid?: string;
+  isOpen: boolean;
+  onClose: () => void;
+  onCommentAdded?: () => void;
+  onCommentsRemoved?: (count: number) => void;
+}) {
   const { dbUser, user } = useAuth();
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -13,6 +28,8 @@ export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }
   const [replyTo, setReplyTo] = useState<{ id: string, userName: string } | null>(null);
   const [expandedReplies, setExpandedReplies] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [reportCommentId, setReportCommentId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Comment ke liye real account chahiye (guest nahi)
@@ -94,6 +111,32 @@ export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }
     }
   };
 
+  // Comment ka likhne wala, ya post ka owner delete kar sakta hai
+  const canDeleteComment = (c: any) =>
+    !!dbUser &&
+    ((!!c.userId && c.userId === dbUser.firebaseUid) || (!!postOwnerUid && postOwnerUid === dbUser.firebaseUid));
+
+  const handleDeleteComment = async (c: any) => {
+    if (deletingId) return;
+    if (!confirm(c.parentId ? "Ye reply delete karna hai?" : "Ye comment (aur uske replies) delete karne hain?")) return;
+
+    setDeletingId(c._id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/comments/${c._id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Delete nahi hua.");
+
+      const removed: string[] = data.removedIds || [c._id];
+      setComments(prev => prev.filter(x => !removed.includes(String(x._id))));
+      if (onCommentsRemoved) onCommentsRemoved(removed.length);
+    } catch (err: any) {
+      setError(err?.message || "Delete nahi hua. Dobara try karo.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const toggleReplies = (commentId: string) => {
     if (expandedReplies.includes(commentId)) {
       setExpandedReplies(expandedReplies.filter(id => id !== commentId));
@@ -121,6 +164,7 @@ export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }
     const isMainComment = c._id === rootId;
     const isExpanded = expandedReplies.includes(rootId);
     const isLiked = !!c.likedByMe;
+    const mine = !!dbUser && !!c.userId && c.userId === dbUser.firebaseUid;
 
     return (
       <div key={c._id} className="flex gap-3 w-full items-start mt-4">
@@ -156,6 +200,20 @@ export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }
               Reply
             </span>
             {c.likes > 0 && <span className="text-gray-400">{c.likes} likes</span>}
+
+            {canDeleteComment(c) ? (
+              <button
+                onClick={() => handleDeleteComment(c)}
+                disabled={deletingId === c._id}
+                className="text-red-500 hover:text-red-600 disabled:opacity-50"
+              >
+                {deletingId === c._id ? "Deleting..." : "Delete"}
+              </button>
+            ) : dbUser && !mine ? (
+              <button onClick={() => setReportCommentId(c._id)} className="hover:text-gray-800 dark:hover:text-gray-300">
+                Report
+              </button>
+            ) : null}
           </div>
 
           {isMainComment && replies.length > 0 && (
@@ -243,6 +301,13 @@ export default function CommentModal({ postId, isOpen, onClose, onCommentAdded }
           </div>
         </div>
       </div>
+
+      <ReportModal
+        isOpen={!!reportCommentId}
+        onClose={() => setReportCommentId(null)}
+        targetType="comment"
+        targetId={reportCommentId || ""}
+      />
     </div>
   );
 }

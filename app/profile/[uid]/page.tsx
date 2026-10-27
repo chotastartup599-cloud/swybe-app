@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Grid, ChevronLeft, ShieldCheck, Play, AtSign, Phone } from "lucide-react";
+import { Grid, ChevronLeft, ShieldCheck, Play, AtSign, Phone, Flag } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import FollowButton from "@/components/FollowButton";
 import ProfileGrid from "@/components/ProfileGrid";
+import ReportModal from "@/components/ReportModal";
 
 export default function UserProfilePage() {
   const { dbUser, loading: authLoading } = useAuth();
@@ -17,6 +18,7 @@ export default function UserProfilePage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"posts" | "reels">("posts");
+  const [reportOpen, setReportOpen] = useState(false);
   const viewedRef = useRef<string | null>(null);
 
   const isMyProfile = !!dbUser && dbUser.firebaseUid === uid;
@@ -101,12 +103,22 @@ export default function UserProfilePage() {
           <div className="flex-1 text-center sm:text-left w-full">
             <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
               <h2 className="text-2xl font-bold dark:text-white">{user.name}</h2>
-              <FollowButton
-                targetUserId={uid}
-                initialIsFollowing={!!dbUser?.following?.includes(uid)}
-                onFollowChange={handleFollowChange}
-                variant="card"
-              />
+              <div className="flex items-center gap-3">
+                <FollowButton
+                  targetUserId={uid}
+                  initialIsFollowing={!!dbUser?.following?.includes(uid)}
+                  onFollowChange={handleFollowChange}
+                  variant="card"
+                />
+                {dbUser && (
+                  <button
+                    onClick={() => setReportOpen(true)}
+                    className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-red-500 transition"
+                  >
+                    <Flag className="w-4 h-4" /> Report
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-center sm:justify-start gap-8 mb-4">
@@ -161,6 +173,8 @@ export default function UserProfilePage() {
           <ProfileGrid uid={uid} kind={activeTab} />
         </div>
       </div>
+
+      <ReportModal isOpen={reportOpen} onClose={() => setReportOpen(false)} targetType="user" targetId={uid} />
     </div>
   );
 }
