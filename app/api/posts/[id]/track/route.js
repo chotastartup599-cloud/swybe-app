@@ -62,11 +62,11 @@ export async function POST(req, { params }) {
       daily = await WatchDaily.findOneAndUpdate(
         { userId, day },
         { $inc: { seconds: timeSpent } },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
     } catch (error) {
       if (error.code !== 11000) throw error;
-      daily = await WatchDaily.findOneAndUpdate({ userId, day }, { $inc: { seconds: timeSpent } }, { new: true });
+      daily = await WatchDaily.findOneAndUpdate({ userId, day }, { $inc: { seconds: timeSpent } }, { returnDocument: 'after' });
     }
 
     const previous = daily.seconds - timeSpent;

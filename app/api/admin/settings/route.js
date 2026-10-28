@@ -57,7 +57,7 @@ export async function POST(req) {
     const updatedSettings = await Settings.findOneAndUpdate(
       {},
       { $set },
-      { new: true, upsert: true, sort: { createdAt: 1 }, setDefaultsOnInsert: true }
+      { returnDocument: 'after', upsert: true, sort: { createdAt: 1 }, setDefaultsOnInsert: true }
     ).lean();
 
     return NextResponse.json({ success: true, data: updatedSettings }, { status: 200 });

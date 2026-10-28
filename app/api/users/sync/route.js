@@ -69,7 +69,7 @@ export async function POST(req) {
       // Signup ke time pehle sync me naam nahi hota, baad me asli naam aa jaata hai
       if (realName && PLACEHOLDER_NAMES.includes(user.name)) changes.name = realName;
       if (Object.keys(changes).length > 0) {
-        user = await User.findOneAndUpdate({ firebaseUid }, { $set: changes }, { new: true });
+        user = await User.findOneAndUpdate({ firebaseUid }, { $set: changes }, { returnDocument: 'after' });
       }
     }
 

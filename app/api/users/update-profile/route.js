@@ -61,7 +61,7 @@ export async function POST(req) {
     const updatedUser = await User.findOneAndUpdate(
       { firebaseUid: auth.uid },
       { $set },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedUser) {

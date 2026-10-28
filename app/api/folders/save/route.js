@@ -24,7 +24,7 @@ export async function POST(req) {
       const updated = await Folder.findOneAndUpdate(
         { _id: folderId, userId: auth.uid },
         { $pull: { posts: postId } },
-        { new: true }
+        { returnDocument: 'after' }
       );
       if (!updated) return NextResponse.json({ success: false, error: 'Folder not found' }, { status: 404 });
       return NextResponse.json({ success: true, data: updated }, { status: 200 });
@@ -39,7 +39,7 @@ export async function POST(req) {
     const updatedFolder = await Folder.findOneAndUpdate(
       { _id: folderId, userId: auth.uid, [`posts.${MAX_POSTS_PER_FOLDER - 1}`]: { $exists: false } },
       { $addToSet: { posts: postId } }, // $addToSet duplicate entries rokta hai
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!updatedFolder) {

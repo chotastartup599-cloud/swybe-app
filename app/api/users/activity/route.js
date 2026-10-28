@@ -60,7 +60,7 @@ export async function POST(req) {
       update.$addToSet = { badges: { $each: badgesToAdd } };
     }
 
-    const updated = await User.findOneAndUpdate(filter, update, { new: true });
+    const updated = await User.findOneAndUpdate(filter, update, { returnDocument: 'after' });
     const result = updated || (await User.findById(user._id));
 
     return NextResponse.json({ success: true, data: result }, { status: 200 });

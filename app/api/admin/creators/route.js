@@ -59,7 +59,7 @@ export async function POST(req) {
     }
 
     const updatedUser = await User.findOneAndUpdate({ firebaseUid, role: 'master' }, update, {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
     })
       .select('firebaseUid name email masterStatus')

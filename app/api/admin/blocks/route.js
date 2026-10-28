@@ -97,7 +97,7 @@ export async function PATCH(req) {
       return NextResponse.json({ success: false, error: 'Update karne ke liye kuch nahi mila.' }, { status: 400 });
     }
 
-    const updated = await Block.findByIdAndUpdate(body.id, { $set }, { new: true, runValidators: true }).lean();
+    const updated = await Block.findByIdAndUpdate(body.id, { $set }, { returnDocument: 'after', runValidators: true }).lean();
     if (!updated) return NextResponse.json({ success: false, error: 'Block not found' }, { status: 404 });
 
     return NextResponse.json({ success: true, data: updated }, { status: 200 });
